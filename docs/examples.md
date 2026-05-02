@@ -1,0 +1,89 @@
+# Examples
+
+This page shows common Waystone workflows using the default `.waystone/` ledger.
+
+## Import A Repository
+
+Authenticate with GitHub:
+```sh
+waystone github auth login
+```
+
+Import a repository:
+```sh
+waystone github import steadytao/waymark
+```
+
+Set the imported repository as the default browsing source:
+```sh
+waystone source default github:steadytao/waymark
+```
+
+## Browse Imported History
+
+List issues from the default source:
+```sh
+waystone issue list
+```
+
+Show an issue:
+```sh
+waystone issue show 15
+```
+
+Show issue comments:
+```sh
+waystone issue comments 15
+```
+
+List pull requests:
+```sh
+waystone pr list
+```
+
+Show a pull request:
+```sh
+waystone pr show 14
+```
+
+## Verify The Ledger
+
+Run strict verification:
+```sh
+waystone ledger verify --strict
+```
+
+Run practical health checks:
+```sh
+waystone ledger doctor
+```
+
+Strict verification checks JSON validity, operation-chain integrity and recorded object hashes. It detects accidental edits and local tampering, but it does not prove that the original forge content was correct.
+
+## Export The Ledger
+
+Export the full ledger:
+```sh
+waystone ledger export --out waystone-ledger
+```
+
+Inspect an archive before importing it:
+```sh
+waystone ledger inspect waystone-ledger
+```
+
+Importing a Waystone archive must never execute ledger contents.
+
+## Source-Local Numbers
+
+Waystone treats issue, pull request and milestone numbers as source-local.
+
+For example:
+```text
+github:example/project#1
+waystone:example/project#1
+```
+
+Those are different records, even though both display as `#1`.
+
+The fixture in [`../testdata/ledgers/overlapping-sources/.waystone/`](../testdata/ledgers/overlapping-sources/.waystone/) demonstrates this with one GitHub source and one repo-local `waystone:` source.

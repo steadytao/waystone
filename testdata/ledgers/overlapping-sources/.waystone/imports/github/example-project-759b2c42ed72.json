@@ -1,0 +1,15 @@
+{
+  "system": "github",
+  "owner": "example",
+  "repo": "project",
+  "url": "https://github.com/example/project",
+  "objects": [
+    {
+      "object": "issue",
+      "number": 1,
+      "id": "github:issue:1",
+      "path": "objects/github/example/project/issues/000001.json",
+      "sha256": "f12b396baf2ff86c28f5471fec0020023087664e0cfc17e9bca7793ff0bc6918"
+    }
+  ]
+}

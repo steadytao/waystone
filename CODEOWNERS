@@ -1,0 +1,53 @@
+# Project-wide Ownership
+* @steadytao
+
+# Governance, Security and Contributor Process
+/GOVERNANCE.md @steadytao
+/SECURITY.md @steadytao
+/SUPPORT.md @steadytao
+/CODE_OF_CONDUCT.md @steadytao
+/CONTRIBUTING.md @steadytao
+/DCO.md @steadytao
+/MAINTAINERS.md @steadytao
+/AUTHORS @steadytao
+/CONTRIBUTORS @steadytao
+/CODEOWNERS @steadytao
+
+# Product and User-Facing Documentation
+/README.md @steadytao
+/CHANGELOG.md @steadytao
+/ROADMAP.md @steadytao
+/docs/README.md @steadytao
+/docs/cli.md @steadytao
+/docs/privacy.md @steadytao
+/docs/security.md @steadytao
+/docs/product/ @steadytao
+/docs/releases/ @steadytao
+
+# Architecture and Ledger Semantics
+/docs/architecture/ @steadytao
+/docs/ledger-format.md @steadytao
+/docs/operations.md @steadytao
+/docs/signing.md @steadytao
+/internal/model/ @steadytao
+/internal/ledger/ @steadytao
+
+# Authentication, GitHub Import and CLI Surface
+/cmd/waystone/ @steadytao
+/internal/cli/ @steadytao
+/internal/auth/ @steadytao
+/internal/github/ @steadytao
+
+# CI, Release and Supply Chain
+/.github/ @steadytao
+/.goreleaser.yaml @steadytao
+/go.mod @steadytao
+/go.sum @steadytao
+
+# Repository Standards
+/.editorconfig @steadytao
+/.gitattributes @steadytao
+/.gitignore @steadytao
+/AGENTS.md @steadytao
+/LICENSE @steadytao
+/docs/development/ @steadytao

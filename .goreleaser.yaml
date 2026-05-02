@@ -1,0 +1,69 @@
+version: 2
+
+project_name: waystone
+
+before:
+  hooks:
+    - go mod download
+
+builds:
+  - id: waystone
+    main: ./cmd/waystone
+    binary: waystone
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+
+archives:
+  - id: default
+    ids:
+      - waystone
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: "checksums.txt"
+
+sboms:
+  - id: archive-spdx
+    artifacts: archive
+    documents:
+      - "${artifact}.spdx.json"
+
+signs:
+  - id: checksum-bundle
+    cmd: cosign
+    signature: "${artifact}.sigstore.json"
+    args:
+      - "sign-blob"
+      - "--bundle=${signature}"
+      - "${artifact}"
+      - "--yes"
+    artifacts: checksum
+  - id: sbom-bundles
+    cmd: cosign
+    signature: "${artifact}.sigstore.json"
+    args:
+      - "sign-blob"
+      - "--bundle=${signature}"
+      - "${artifact}"
+      - "--yes"
+    artifacts: sbom
+
+release:
+  name_template: '{{ envOrDefault "RELEASE_NAME" (printf "Waystone %s" .Tag) }}'
+  prerelease: auto
+  mode: replace

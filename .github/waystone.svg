@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg aria-labelledby="title desc" role="img" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+<title>Waystone Logo</title>
+<defs>
+<linearGradient id="d" x1="32" x2="224" y1="24" y2="232" gradientUnits="userSpaceOnUse">
+<stop stop-color="#1E3A5F" offset="0"/>
+<stop stop-color="#0F172A" offset="1"/>
+</linearGradient>
+<linearGradient id="e" x1="62" x2="196" y1="42" y2="214" gradientUnits="userSpaceOnUse">
+<stop stop-color="#F8FAFC" offset="0"/>
+<stop stop-color="#CBD5E1" offset="1"/>
+</linearGradient>
+<linearGradient id="f" x1="62" x2="94" y1="42" y2="214" gradientUnits="userSpaceOnUse">
+<stop stop-color="#94A3B8" offset="0"/>
+<stop stop-color="#475569" offset="1"/>
+</linearGradient>
+</defs>
+<rect x="20" y="20" width="216" height="216" rx="52" fill="url(#d)"/>
+<path d="m76 46h104c11 0 20 9 20 20v124c0 11-9 20-20 20h-104c-11 0-20-9-20-20v-124c0-11 9-20 20-20z" fill="url(#e)"/>
+<path d="m76 46h20v164h-20c-11 0-20-9-20-20v-124c0-11 9-20 20-20z" fill="url(#f)"/>
+<rect x="91" y="62" width="3" height="132" rx="1.5" fill="#1E293B" opacity=".26"/>
+<circle cx="116" cy="86" r="6" fill="#1E3A5F"/>
+<circle cx="116" cy="128" r="6" fill="#1E3A5F"/>
+<circle cx="116" cy="170" r="6" fill="#1E3A5F"/>
+<path d="m116 92v30m0 12v30" opacity=".55" stroke="#1E3A5F" stroke-linecap="round" stroke-width="4"/>
+<rect x="132" y="78" width="42" height="8" rx="4" fill="#1E293B"/>
+<rect x="132" y="120" width="52" height="8" rx="4" fill="#1E293B"/>
+<rect x="132" y="162" width="36" height="8" rx="4" fill="#1E293B"/>
+<rect x="132" y="94" width="32" height="6" rx="3" fill="#64748B"/>
+<rect x="132" y="136" width="40" height="6" rx="3" fill="#64748B"/>
+<rect x="132" y="178" width="46" height="6" rx="3" fill="#64748B"/>
+<rect x="88" y="226" width="80" height="8" rx="4" fill="#334155" opacity=".9"/>
+</svg>

@@ -1,0 +1,15 @@
+{
+  "system": "waystone",
+  "owner": "example",
+  "repo": "project",
+  "url": "waystone:example/project",
+  "objects": [
+    {
+      "object": "issue",
+      "number": 1,
+      "id": "waystone:issue:1",
+      "path": "objects/waystone/example/project/issues/000001.json",
+      "sha256": "9d3e7f745eb843d1588ef07d1fd1608e652cb4408e4b77ab4b7ac906db9f9163"
+    }
+  ]
+}

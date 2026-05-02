@@ -1,0 +1,22 @@
+{
+  "import_id": "waystone:example/project",
+  "source": {
+    "system": "waystone",
+    "owner": "example",
+    "repo": "project",
+    "url": "waystone:example/project"
+  },
+  "id": "waystone:issue:1",
+  "source_id": 1,
+  "number": 1,
+  "title": "Local Waystone issue number one",
+  "body": "This record demonstrates that local Waystone issue #1 is separate from GitHub issue #1.",
+  "state": "open",
+  "author": {
+    "login": "maintainer"
+  },
+  "comments": 0,
+  "original_url": "waystone:example/project/issues/1",
+  "created_at": "2026-01-01T00:00:00Z",
+  "updated_at": "2026-01-01T00:00:00Z"
+}

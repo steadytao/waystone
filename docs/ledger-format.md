@@ -1,0 +1,123 @@
+# Ledger Format
+
+Waystone stores imported project history in a local `.waystone/` ledger.
+
+The format is plain JSON plus content hashes. It is designed to be inspectable, portable and safe to import without executing code.
+
+## Layout
+
+```text
+.waystone/
+  ledger.json
+  projects/
+    <system>/
+      <owner>/
+        <repo>.json
+  imports/
+    <system>/
+      <owner>-<repo>-<hash>.json
+  objects/
+    <system>/
+      <owner>/
+        <repo>/
+          issues/
+          comments/
+          pull_requests/
+          reviews/
+          labels/
+          milestones/
+          releases/
+  operations/
+    <operation-id>-<hash>.json
+```
+
+## Files
+
+`ledger.json` records ledger metadata: format version, created timestamp, updated timestamp and optional default source.
+
+`projects/` stores repository-level metadata.
+
+`imports/` stores source manifests. A source manifest indexes one imported repository.
+
+`objects/` stores imported records grouped by source.
+
+`operations/` stores local command history.
+
+## Source Namespaces
+
+Sources use this form:
+```text
+<system>:<owner>/<repo>
+```
+
+GitHub imports use `github:owner/repo`.
+
+`waystone:owner/repo` is reserved for repo-scoped local Waystone records. It exists so future manual or migrated records can share the ledger without colliding with forge-owned numbers.
+
+Issue, pull request and milestone numbers are source-local. `github:example/project#1` and `waystone:example/project#1` are different records. Global views order records by source first, then by number, so overlapping numbers stay deterministic.
+
+## Source Manifests
+
+Each source manifest records:
+- source identity: system, owner, repo and URL
+- object references
+- operation references
+
+Object references include object type, number or ID, relative path and SHA-256 of the canonical object JSON. Strict verification uses those hashes to detect missing or manually changed object files.
+
+Operation references identify import and refresh operations associated with the source. They support `source status`, `source inspect`, `ledger doctor` and source-targeted export.
+
+## Operation Records
+
+Operation records describe local commands that changed or verified the ledger.
+
+They include:
+- command and arguments
+- start and finish timestamps
+- privacy-minimal actor metadata
+- authentication metadata where relevant
+- input source
+- output summary
+- object changes
+- previous operation ID
+- operation hash
+
+The operation hash covers the operation record with its own hash field empty. The previous-operation link creates an append-only operation chain.
+
+## Strict Verification
+
+```sh
+waystone ledger verify --strict
+```
+
+Strict verification checks:
+- all JSON files parse
+- operation hashes match recorded content
+- operation records link to the previous operation
+- recorded object hashes match local files
+
+Strict verification detects local tampering and accidental edits. It does not prove that the original remote forge content was correct.
+
+## Archives
+
+```sh
+waystone ledger export --out waystone-ledger
+waystone ledger import waystone-ledger
+```
+
+The default archive format is a zstd-compressed tar stream. The default file name is extensionless by convention, similar to how Git often treats data format as content rather than suffix.
+
+JSON export is available for inspection and tooling:
+```sh
+waystone ledger export --format json --out waystone-ledger.json
+```
+
+`--compact` removes formatting from JSON export only. It does not rewrite the ledger.
+
+Safe import verifies archive shape and confirms GitHub sources through authenticated GitHub API access unless `--unsafe` is set.
+
+Import never executes ledger contents.
+
+## Compatibility
+
+The format is experimental. Future changes should prefer explicit migrations over silently accepting incompatible ledgers.

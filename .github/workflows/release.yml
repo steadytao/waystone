@@ -1,0 +1,201 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  GOTOOLCHAIN: local
+  SYFT_VERSION: v1.42.4
+  COSIGN_VERSION: v3.0.6
+
+jobs:
+  release:
+    name: Build, Sign and Publish Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40 # v2.19.0
+        with:
+          egress-policy: block
+          allowed-endpoints: |
+            168.63.129.16:53
+            api.github.com:443
+            codeload.github.com:443
+            github.com:443
+            *.actions.githubusercontent.com:443
+            results-receiver.actions.githubusercontent.com:443
+            *.blob.core.windows.net:443
+            fulcio.sigstore.dev:443
+            github-releases.githubusercontent.com:443
+            objects.githubusercontent.com:443
+            objects-origin.githubusercontent.com:443
+            github-registry-files.githubusercontent.com:443
+            proxy.golang.org:443
+            raw.githubusercontent.com:443
+            rekor.sigstore.dev:443
+            release-assets.githubusercontent.com:443
+            storage.googleapis.com:443
+            sum.golang.org:443
+            timestamp.sigstore.dev:443
+            tuf-repo-cdn.sigstore.dev:443
+
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+          check-latest: true
+          cache: true
+
+      - name: Install Syft
+        id: syft
+        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          syft-version: ${{ env.SYFT_VERSION }}
+
+      - name: Add Syft to PATH
+        run: |
+          set -euo pipefail
+          dirname "${{ steps.syft.outputs.cmd }}" >> "${GITHUB_PATH}"
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003 # v4.1.1
+        with:
+          cosign-release: ${{ env.COSIGN_VERSION }}
+
+      - name: Print Tool Versions
+        run: |
+          set -euo pipefail
+          go version
+          "${{ steps.syft.outputs.cmd }}" version
+          cosign version
+
+      - name: Resolve release metadata
+        id: metadata
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          RELEASE_NOTES_FILE="docs/releases/${VERSION}.md"
+
+          {
+            echo "version=$VERSION"
+            echo "release_name=Waystone $VERSION"
+            echo "release_notes_file=$RELEASE_NOTES_FILE"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Check checked-in release notes file exists
+        run: |
+          RELEASE_NOTES_FILE="${{ steps.metadata.outputs.release_notes_file }}"
+
+          if [ ! -f "$RELEASE_NOTES_FILE" ]; then
+            echo "Error: checked-in release notes file '$RELEASE_NOTES_FILE' does not exist"
+            exit 1
+          fi
+
+      - name: Verify CONTRIBUTORS ledger
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/release/generate_contributors.py --check
+
+      - name: Build release notes
+        id: release_notes
+        run: |
+          VERSION="${{ steps.metadata.outputs.version }}"
+          RELEASE_NOTES_FILE="${{ steps.metadata.outputs.release_notes_file }}"
+          GENERATED_RELEASE_NOTES_FILE="$RUNNER_TEMP/release-notes.md"
+
+          awk '
+            /^## Changelog[[:space:]]*$/ { exit }
+            /^<!--[[:space:]]*changelog:/ { exit }
+            { print }
+          ' "$RELEASE_NOTES_FILE" > "$GENERATED_RELEASE_NOTES_FILE"
+
+          printf '\n## Changelog\n\n' >> "$GENERATED_RELEASE_NOTES_FILE"
+
+          PREVIOUS_TAG="$(git describe --tags --abbrev=0 "${VERSION}^" 2>/dev/null || true)"
+          if [ -n "$PREVIOUS_TAG" ]; then
+            git log --reverse --format='- %H %s' "${PREVIOUS_TAG}..${VERSION}" >> "$GENERATED_RELEASE_NOTES_FILE"
+          else
+            git log --reverse --format='- %H %s' "$VERSION" >> "$GENERATED_RELEASE_NOTES_FILE"
+          fi
+
+          echo "generated_release_notes_file=$GENERATED_RELEASE_NOTES_FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@e24998b8b67b290c2fa8b7c14fcfa7de2c5c9b8c # v7.1.0
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean --release-notes "${{ steps.release_notes.outputs.generated_release_notes_file }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_NAME: ${{ steps.metadata.outputs.release_name }}
+
+      - name: Verify release integrity assets
+        run: |
+          set -euo pipefail
+
+          if [ ! -f dist/checksums.txt ]; then
+            echo "Missing dist/checksums.txt"
+            exit 1
+          fi
+
+          if [ ! -f dist/checksums.txt.sigstore.json ]; then
+            echo "Missing dist/checksums.txt.sigstore.json"
+            exit 1
+          fi
+
+          mapfile -t sboms < <(find dist -maxdepth 1 -type f -name '*.spdx.json' | sort)
+          if [ "${#sboms[@]}" -eq 0 ]; then
+            echo "No archive SBOMs were generated"
+            exit 1
+          fi
+
+          for sbom in "${sboms[@]}"; do
+            if [ ! -f "${sbom}.sigstore.json" ]; then
+              echo "Missing Sigstore bundle for SBOM: ${sbom}"
+              exit 1
+            fi
+          done
+
+          (
+            cd dist
+            sha256sum -c checksums.txt
+          )
+
+          cosign verify-blob \
+            --bundle dist/checksums.txt.sigstore.json \
+            --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@${GITHUB_REF}" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            dist/checksums.txt
+
+          cosign verify-blob \
+            --bundle "${sboms[0]}.sigstore.json" \
+            --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@${GITHUB_REF}" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "${sboms[0]}"
+
+      - name: Attest released artifacts
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+        with:
+          subject-checksums: ./dist/checksums.txt

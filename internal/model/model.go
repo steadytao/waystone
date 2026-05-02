@@ -1,0 +1,176 @@
+// Copyright 2026 The Waystone Authors
+// SPDX-License-Identifier: Apache-2.0
+
+package model
+
+import "time"
+
+type GitHubImport struct {
+	Project        Project         `json:"project"`
+	Source         Source          `json:"source"`
+	ImportedAt     time.Time       `json:"imported_at"`
+	Issues         []Issue         `json:"issues"`
+	Comments       []Comment       `json:"comments"`
+	PullRequests   []PullRequest   `json:"pull_requests"`
+	ReviewComments []ReviewComment `json:"review_comments"`
+	Labels         []Label         `json:"labels"`
+	Milestones     []Milestone     `json:"milestones"`
+	Releases       []Release       `json:"releases"`
+}
+
+type Ledger struct {
+	Version       string    `json:"version"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
+	DefaultSource *Source   `json:"default_source,omitempty"`
+}
+
+type Source struct {
+	System     string               `json:"system"`
+	Owner      string               `json:"owner"`
+	Repo       string               `json:"repo"`
+	URL        string               `json:"url"`
+	Objects    []SourceObjectRef    `json:"objects,omitempty"`
+	Operations []SourceOperationRef `json:"operations,omitempty"`
+}
+
+type SourceObjectRef struct {
+	Object string `json:"object"`
+	Number int    `json:"number,omitempty"`
+	ID     string `json:"id,omitempty"`
+	Path   string `json:"path"`
+	SHA256 string `json:"sha256"`
+}
+
+type SourceOperationRef struct {
+	ID        string    `json:"id"`
+	Command   string    `json:"command"`
+	Path      string    `json:"path"`
+	SHA256    string    `json:"sha256,omitempty"`
+	StartedAt time.Time `json:"started_at"`
+}
+
+type Provenance struct {
+	ImportID string `json:"import_id"`
+	Source   Source `json:"source"`
+}
+
+type Project struct {
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description,omitempty"`
+	URL         string    `json:"url"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+type Author struct {
+	ID        int64  `json:"id,omitempty"`
+	Login     string `json:"login,omitempty"`
+	Name      string `json:"name,omitempty"`
+	URL       string `json:"url,omitempty"`
+	AvatarURL string `json:"avatar_url,omitempty"`
+}
+
+type Issue struct {
+	Provenance
+	ID          string    `json:"id"`
+	SourceID    int64     `json:"source_id"`
+	Number      int       `json:"number"`
+	Title       string    `json:"title"`
+	Body        string    `json:"body,omitempty"`
+	State       string    `json:"state"`
+	Author      Author    `json:"author"`
+	Labels      []string  `json:"labels,omitempty"`
+	Milestone   string    `json:"milestone,omitempty"`
+	Comments    int       `json:"comments"`
+	OriginalURL string    `json:"original_url"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+	ClosedAt    time.Time `json:"closed_at,omitempty"`
+}
+
+type Comment struct {
+	Provenance
+	ID          string    `json:"id"`
+	SourceID    int64     `json:"source_id"`
+	IssueNumber int       `json:"issue_number"`
+	Author      Author    `json:"author"`
+	Body        string    `json:"body,omitempty"`
+	OriginalURL string    `json:"original_url"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+type PullRequest struct {
+	Provenance
+	ID          string    `json:"id"`
+	SourceID    int64     `json:"source_id"`
+	Number      int       `json:"number"`
+	Title       string    `json:"title"`
+	Body        string    `json:"body,omitempty"`
+	State       string    `json:"state"`
+	Author      Author    `json:"author"`
+	BaseRef     string    `json:"base_ref"`
+	HeadRef     string    `json:"head_ref"`
+	Merged      bool      `json:"merged"`
+	OriginalURL string    `json:"original_url"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+	ClosedAt    time.Time `json:"closed_at,omitempty"`
+	MergedAt    time.Time `json:"merged_at,omitempty"`
+}
+
+type ReviewComment struct {
+	Provenance
+	ID                string    `json:"id"`
+	SourceID          int64     `json:"source_id"`
+	PullRequestNumber int       `json:"pull_request_number"`
+	Author            Author    `json:"author"`
+	Body              string    `json:"body,omitempty"`
+	Path              string    `json:"path,omitempty"`
+	Position          int       `json:"position,omitempty"`
+	Line              int       `json:"line,omitempty"`
+	OriginalURL       string    `json:"original_url"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
+}
+
+type Label struct {
+	Provenance
+	ID          string `json:"id"`
+	SourceID    int64  `json:"source_id"`
+	Name        string `json:"name"`
+	Color       string `json:"color,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+type Milestone struct {
+	Provenance
+	ID          string    `json:"id"`
+	SourceID    int64     `json:"source_id"`
+	Number      int       `json:"number"`
+	Title       string    `json:"title"`
+	Description string    `json:"description,omitempty"`
+	State       string    `json:"state"`
+	OriginalURL string    `json:"original_url"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+	ClosedAt    time.Time `json:"closed_at,omitempty"`
+	DueOn       time.Time `json:"due_on,omitempty"`
+}
+
+type Release struct {
+	Provenance
+	ID          string    `json:"id"`
+	SourceID    int64     `json:"source_id"`
+	TagName     string    `json:"tag_name"`
+	Name        string    `json:"name,omitempty"`
+	Body        string    `json:"body,omitempty"`
+	Author      Author    `json:"author"`
+	Draft       bool      `json:"draft"`
+	Prerelease  bool      `json:"prerelease"`
+	OriginalURL string    `json:"original_url"`
+	CreatedAt   time.Time `json:"created_at"`
+	PublishedAt time.Time `json:"published_at,omitempty"`
+}

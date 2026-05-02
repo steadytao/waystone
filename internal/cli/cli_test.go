@@ -1,0 +1,1011 @@
+// Copyright 2026 The Waystone Authors
+// SPDX-License-Identifier: Apache-2.0
+
+package cli
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/steadytao/waystone/internal/github"
+	"github.com/steadytao/waystone/internal/ledger"
+	"github.com/steadytao/waystone/internal/model"
+)
+
+func TestDefaultGitHubClientID(t *testing.T) {
+	t.Setenv("OAUTH_CLIENT_ID", "")
+
+	if got := defaultGitHubClientID(); got != defaultGitHubOAuthClientID {
+		t.Fatalf("defaultGitHubClientID() = %q, want built-in client ID", got)
+	}
+}
+
+func TestDefaultGitHubClientIDAllowsOverride(t *testing.T) {
+	t.Setenv("OAUTH_CLIENT_ID", "custom-client-id")
+
+	if got := defaultGitHubClientID(); got != "custom-client-id" {
+		t.Fatalf("defaultGitHubClientID() = %q, want custom-client-id", got)
+	}
+}
+
+func TestGitHubTokenAlwaysPrefersGitHubToken(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "primary-token")
+	t.Setenv("OTHER_GITHUB_TOKEN", "secondary-token")
+
+	if got := githubTokenFromEnvironment("OTHER_GITHUB_TOKEN"); got != "primary-token" {
+		t.Fatalf("githubTokenFromEnvironment() = %q, want primary-token", got)
+	}
+}
+
+func TestGitHubTokenFallsBackToCustomEnvironment(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "")
+	t.Setenv("OTHER_GITHUB_TOKEN", "secondary-token")
+
+	if got := githubTokenFromEnvironment("OTHER_GITHUB_TOKEN"); got != "secondary-token" {
+		t.Fatalf("githubTokenFromEnvironment() = %q, want secondary-token", got)
+	}
+}
+
+func TestGlobalAuthCommandIsNotSupported(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"auth"}, &stdout, &stderr)
+	if err == nil || !strings.Contains(err.Error(), `unknown command "auth"`) {
+		t.Fatalf("Run error = %v, want unknown auth command", err)
+	}
+}
+
+func TestGitHubAuthUsage(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"github", "auth"}, &stdout, &stderr)
+	if err == nil || !strings.Contains(stderr.String(), "waystone github auth login") {
+		t.Fatalf("stderr = %q err = %v, want github auth usage", stderr.String(), err)
+	}
+}
+
+func TestVersionCommand(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"version"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if strings.TrimSpace(stdout.String()) != Version {
+		t.Fatalf("stdout = %q, want %q", stdout.String(), Version)
+	}
+}
+
+func TestLedgerSummaryCommand(t *testing.T) {
+	root := writeTestLedger(t)
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"ledger", "summary", "--ledger", root}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Projects       1") {
+		t.Fatalf("stdout = %q, want project summary", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "Issues           1") {
+		t.Fatalf("stdout = %q, want issue count", stdout.String())
+	}
+}
+
+func TestLedgerHistoryCommand(t *testing.T) {
+	root := writeTestLedger(t)
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"ledger", "history", "--ledger", root}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "github import") {
+		t.Fatalf("stdout = %q, want operation history", stdout.String())
+	}
+}
+
+func TestLedgerShowOperationCommand(t *testing.T) {
+	root := writeTestLedger(t)
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"ledger", "show-operation", "--ledger", root, "github-import-20260101t000000.000000000z"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Command        github import") {
+		t.Fatalf("stdout = %q, want operation detail", stdout.String())
+	}
+}
+
+func TestLedgerVerifyCommand(t *testing.T) {
+	root := writeTestLedger(t)
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"ledger", "verify", "--ledger", root}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Checksum") {
+		t.Fatalf("stdout = %q, want checksum", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "Operation") {
+		t.Fatalf("stdout = %q, want operation ID", stdout.String())
+	}
+	operations, err := (ledger.Reader{Root: root}).Operations()
+	if err != nil {
+		t.Fatalf("Operations returned error: %v", err)
+	}
+	var found bool
+	for _, operation := range operations {
+		if operation.Command == "ledger verify" {
+			found = true
+			if len(operation.Changes) == 0 {
+				t.Fatal("verify operation did not record verified actions")
+			}
+		}
+	}
+	if !found {
+		t.Fatal("verify operation was not written")
+	}
+}
+
+func TestLedgerVerifyOperationsCommand(t *testing.T) {
+	root := writeTestLedger(t)
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"ledger", "verify", "--operations", "--ledger", root}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	for _, want := range []string{"Operations", "Recorded files", "Operation checksum"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+		}
+	}
+}
+
+func TestLedgerVerifyStrictCommand(t *testing.T) {
+	root := writeTestLedger(t)
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"ledger", "verify", "--strict", "--ledger", root}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Operation checksum") {
+		t.Fatalf("stdout = %q, want strict operation checksum", stdout.String())
+	}
+}
+
+func TestLedgerStatusCommand(t *testing.T) {
+	root := writeTestLedger(t)
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"ledger", "status", "--ledger", root}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	for _, want := range []string{"Projects       1", "Operations", "Checksum"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+		}
+	}
+}
+
+func TestLedgerDoctorCommand(t *testing.T) {
+	root := writeTestLedger(t)
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"ledger", "doctor", "--ledger", root, "--stale-after", "0"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "No practical ledger issues found") {
+		t.Fatalf("stdout = %q, want clean doctor output", stdout.String())
+	}
+}
+
+func TestLedgerDoctorStaleSource(t *testing.T) {
+	root := writeTestLedger(t)
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"ledger", "doctor", "--ledger", root, "--stale-after", "1h"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "last refreshed") {
+		t.Fatalf("stdout = %q, want stale-source warning", stdout.String())
+	}
+}
+
+func TestLedgerDoctorJSONCommand(t *testing.T) {
+	root := writeTestLedger(t)
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"ledger", "doctor", "--ledger", root, "--stale-after", "1h", "--json"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	var findings []doctorFinding
+	if err := json.Unmarshal(stdout.Bytes(), &findings); err != nil {
+		t.Fatalf("doctor JSON did not decode: %v\n%s", err, stdout.String())
+	}
+	if len(findings) == 0 || findings[0].Severity == "" {
+		t.Fatalf("doctor JSON findings = %#v, want populated findings", findings)
+	}
+}
+
+func TestLedgerDiffCommand(t *testing.T) {
+	root := writeTestLedger(t)
+	var stdout, stderr bytes.Buffer
+	source := model.Source{System: "github", Owner: "example", Repo: "project"}
+	operation := model.Operation{
+		ID:         "source-refresh-20260102t000000.000000000z",
+		Command:    "source refresh",
+		StartedAt:  time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC),
+		FinishedAt: time.Date(2026, 1, 2, 0, 1, 0, 0, time.UTC),
+		Actor:      model.OperationActor{Source: "local"},
+		Output:     model.OperationOutput{Ledger: root, Updated: 1},
+		Changes: []model.ObjectChange{
+			{Type: "updated", Object: "source", Path: ledger.SourcePath(source)},
+		},
+	}
+	if err := (ledger.Writer{Root: root}).WriteOperation(operation); err != nil {
+		t.Fatalf("WriteOperation returned error: %v", err)
+	}
+	err := Run(context.Background(), []string{"ledger", "diff", "--ledger", root, "--source", "github:example/project", "--since", "github-import-20260101t000000.000000000z"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "source-refresh") || !strings.Contains(stdout.String(), "imports/github/example-project") {
+		t.Fatalf("stdout = %q, want source-scoped diff", stdout.String())
+	}
+}
+
+func TestLedgerExportImportCommands(t *testing.T) {
+	root := writeTestLedger(t)
+	archive := filepath.Join(t.TempDir(), "waystone-ledger.tar.zst")
+	var stdout, stderr bytes.Buffer
+
+	if err := Run(context.Background(), []string{"ledger", "export", "--ledger", root, "--out", archive}, &stdout, &stderr); err != nil {
+		t.Fatalf("export returned error: %v", err)
+	}
+	imported := filepath.Join(t.TempDir(), ".waystone")
+	stdout.Reset()
+	if err := Run(context.Background(), []string{"ledger", "import", archive, "--ledger", imported, "--unsafe"}, &stdout, &stderr); err != nil {
+		t.Fatalf("import returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Import complete") {
+		t.Fatalf("stdout = %q, want import complete", stdout.String())
+	}
+}
+
+func TestLedgerExportDefaultsToExtensionlessArchive(t *testing.T) {
+	root := writeTestLedger(t)
+	workdir := t.TempDir()
+	var stdout, stderr bytes.Buffer
+
+	if err := Run(context.Background(), []string{"ledger", "export", "--ledger", root, "--out", filepath.Join(workdir, "waystone-ledger")}, &stdout, &stderr); err != nil {
+		t.Fatalf("export returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Format         archive") {
+		t.Fatalf("stdout = %q, want archive format", stdout.String())
+	}
+}
+
+func TestLedgerExportJSONCommand(t *testing.T) {
+	root := writeTestLedger(t)
+	out := filepath.Join(t.TempDir(), "waystone-ledger.json")
+	var stdout, stderr bytes.Buffer
+
+	if err := Run(context.Background(), []string{"ledger", "export", "--ledger", root, "--format", "json", "--out", out}, &stdout, &stderr); err != nil {
+		t.Fatalf("json export returned error: %v", err)
+	}
+	content, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("read json export: %v", err)
+	}
+	if !bytes.Contains(content, []byte(`"version": "waystone.export.v1"`)) {
+		t.Fatalf("json export = %s, want version", content)
+	}
+}
+
+func TestLedgerInspectCommand(t *testing.T) {
+	root := writeTestLedger(t)
+	archive := filepath.Join(t.TempDir(), "waystone-ledger")
+	var stdout, stderr bytes.Buffer
+
+	if err := Run(context.Background(), []string{"ledger", "export", "--ledger", root, "--out", archive}, &stdout, &stderr); err != nil {
+		t.Fatalf("export returned error: %v", err)
+	}
+	stdout.Reset()
+	if err := Run(context.Background(), []string{"ledger", "inspect", archive}, &stdout, &stderr); err != nil {
+		t.Fatalf("inspect returned error: %v", err)
+	}
+	for _, want := range []string{"Format", "Sources", "Operations", "Strict"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+		}
+	}
+}
+
+func TestLedgerExportSourceCommand(t *testing.T) {
+	root := writeTestLedger(t)
+	archive := filepath.Join(t.TempDir(), "waystone-source")
+	var stdout, stderr bytes.Buffer
+
+	if err := Run(context.Background(), []string{"ledger", "export", "--ledger", root, "--source", "github:example/project", "--out", archive}, &stdout, &stderr); err != nil {
+		t.Fatalf("source export returned error: %v", err)
+	}
+	imported := filepath.Join(t.TempDir(), ".waystone")
+	stdout.Reset()
+	if err := Run(context.Background(), []string{"ledger", "import", archive, "--ledger", imported, "--unsafe"}, &stdout, &stderr); err != nil {
+		t.Fatalf("source import returned error: %v", err)
+	}
+}
+
+func TestSourceListAndShowCommands(t *testing.T) {
+	root := writeTestLedger(t)
+	var stdout, stderr bytes.Buffer
+
+	if err := Run(context.Background(), []string{"source", "list", "--ledger", root}, &stdout, &stderr); err != nil {
+		t.Fatalf("source list returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "github:example/project") {
+		t.Fatalf("stdout = %q, want source spec", stdout.String())
+	}
+	stdout.Reset()
+	if err := Run(context.Background(), []string{"source", "show", "--ledger", root, "github:example/project"}, &stdout, &stderr); err != nil {
+		t.Fatalf("source show returned error: %v", err)
+	}
+	for _, want := range []string{"Objects", "Operations"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+		}
+	}
+}
+
+func TestSourceInspectCommand(t *testing.T) {
+	root := writeTestLedger(t)
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"source", "inspect", "--ledger", root, "--stale-after", "0", "github:example/project"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	for _, want := range []string{"Manifest hash", "Object types", "issue"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+		}
+	}
+}
+
+func TestSourceDefaultCommand(t *testing.T) {
+	root := writeTestLedger(t)
+	var stdout, stderr bytes.Buffer
+
+	if err := Run(context.Background(), []string{"source", "default", "--ledger", root}, &stdout, &stderr); err != nil {
+		t.Fatalf("source default show returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Default source is not set") {
+		t.Fatalf("stdout = %q, want unset default", stdout.String())
+	}
+	stdout.Reset()
+	if err := Run(context.Background(), []string{"source", "default", "--ledger", root, "github:example/project"}, &stdout, &stderr); err != nil {
+		t.Fatalf("source default set returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "github:example/project") {
+		t.Fatalf("stdout = %q, want default source", stdout.String())
+	}
+	stdout.Reset()
+	if err := Run(context.Background(), []string{"source", "default", "--ledger", root, "--clear"}, &stdout, &stderr); err != nil {
+		t.Fatalf("source default clear returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Default source cleared") {
+		t.Fatalf("stdout = %q, want clear confirmation", stdout.String())
+	}
+}
+
+func TestSourceRefreshRequiresSources(t *testing.T) {
+	root := writeEmptyLedger(t)
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"source", "refresh", "--ledger", root}, &stdout, &stderr)
+	if err == nil || !strings.Contains(err.Error(), "ledger has no sources to refresh") {
+		t.Fatalf("Run error = %v, want missing sources error", err)
+	}
+}
+
+func TestSourceStatusCommand(t *testing.T) {
+	root := writeTestLedger(t)
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"source", "status", "--ledger", root, "--stale-after", "0"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	for _, want := range []string{"github:example/project", "LAST REFRESH", "no"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+		}
+	}
+}
+
+func TestResolveRefreshSources(t *testing.T) {
+	root := writeTestLedger(t)
+	writeTestLedgerSource(t, root, "example", "other")
+	reader := ledger.Reader{Root: root}
+
+	all, err := resolveRefreshSources(reader, nil)
+	if err != nil {
+		t.Fatalf("resolveRefreshSources returned error: %v", err)
+	}
+	if len(all) != 2 {
+		t.Fatalf("all sources = %d, want 2", len(all))
+	}
+	selected, err := resolveRefreshSources(reader, []string{"github:example/project"})
+	if err != nil {
+		t.Fatalf("resolveRefreshSources selected returned error: %v", err)
+	}
+	if len(selected) != 1 || ledger.SourceSpec(selected[0]) != "github:example/project" {
+		t.Fatalf("selected sources = %#v, want github:example/project", selected)
+	}
+}
+
+func TestIssueListCommand(t *testing.T) {
+	root := writeTestLedger(t)
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"issue", "list", "--ledger", root}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	for _, want := range []string{"Issues         1", "NUMBER", "#1       open     issue"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+		}
+	}
+}
+
+func TestDefaultSourceFiltersIssueList(t *testing.T) {
+	root := writeTestLedger(t)
+	writeTestLedgerSource(t, root, "example", "other")
+	var stdout, stderr bytes.Buffer
+
+	if err := Run(context.Background(), []string{"source", "default", "--ledger", root, "github:example/project"}, &stdout, &stderr); err != nil {
+		t.Fatalf("source default returned error: %v", err)
+	}
+	stdout.Reset()
+	if err := Run(context.Background(), []string{"issue", "list", "--ledger", root}, &stdout, &stderr); err != nil {
+		t.Fatalf("issue list returned error: %v", err)
+	}
+	if strings.Contains(stdout.String(), "github:example/other") || strings.Contains(stdout.String(), "SOURCE") {
+		t.Fatalf("stdout = %q, want default-source scoped output", stdout.String())
+	}
+}
+
+func TestIssueListSourceFilter(t *testing.T) {
+	root := writeTestLedger(t)
+	writeTestLedgerSource(t, root, "example", "other")
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"issue", "list", "--ledger", root, "--source", "github:example/project"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	for _, want := range []string{"Issues         1", "NUMBER", "#1       open     issue"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+		}
+	}
+	if strings.Contains(stdout.String(), "github:example/other") {
+		t.Fatalf("stdout = %q, want only selected source", stdout.String())
+	}
+}
+
+func TestIssueSearchCommand(t *testing.T) {
+	root := writeTestLedger(t)
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"issue", "search", "--ledger", root, "issue"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	for _, want := range []string{"Issues         1", "MATCH", "#1       open     title        issue"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+		}
+	}
+}
+
+func TestIssueSearchFields(t *testing.T) {
+	root := writeTestLedger(t)
+	var stdout, stderr bytes.Buffer
+
+	if err := Run(context.Background(), []string{"issue", "search", "--ledger", root, "alice"}, &stdout, &stderr); err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Issues         0") {
+		t.Fatalf("stdout = %q, want default search to skip author", stdout.String())
+	}
+	stdout.Reset()
+	if err := Run(context.Background(), []string{"issue", "search", "--ledger", root, "alice", "--field", "author"}, &stdout, &stderr); err != nil {
+		t.Fatalf("Run returned error with author field: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "author") || !strings.Contains(stdout.String(), "Issues         1") {
+		t.Fatalf("stdout = %q, want author match", stdout.String())
+	}
+}
+
+func TestIssueShowCommand(t *testing.T) {
+	root := writeTestLedger(t)
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"issue", "show", "--ledger", root, "1"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Number         #1") {
+		t.Fatalf("stdout = %q, want issue number", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "Title          issue") {
+		t.Fatalf("stdout = %q, want labelled title", stdout.String())
+	}
+}
+
+func TestIssueShowWithComments(t *testing.T) {
+	root := writeTestLedger(t)
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"issue", "show", "--ledger", root, "--with-comments", "1"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	for _, want := range []string{"Title          issue", "Comments", "comment"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+		}
+	}
+}
+
+func TestIssueShowRequiresSourceWhenAmbiguous(t *testing.T) {
+	root := writeTestLedger(t)
+	writeTestLedgerSource(t, root, "example", "other")
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"issue", "show", "--ledger", root, "1"}, &stdout, &stderr)
+	if err == nil || !strings.Contains(err.Error(), "exists in multiple sources") {
+		t.Fatalf("Run error = %v, want ambiguity error", err)
+	}
+	stdout.Reset()
+	err = Run(context.Background(), []string{"issue", "show", "--ledger", root, "--source", "github:example/project", "1"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error with source: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Source         github:example/project") {
+		t.Fatalf("stdout = %q, want selected source", stdout.String())
+	}
+}
+
+func TestIssueCommentsCommand(t *testing.T) {
+	root := writeTestLedger(t)
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"issue", "comments", "--ledger", root, "1"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Comments") {
+		t.Fatalf("stdout = %q, want comments output", stdout.String())
+	}
+}
+
+func TestIssueTimelineCommand(t *testing.T) {
+	root := writeTestLedger(t)
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"issue", "timeline", "--ledger", root, "1"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	for _, want := range []string{"Issue", "issue.opened", "issue.comment", "comment"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+		}
+	}
+}
+
+func TestIssueCommentsRequiresSourceWhenAmbiguous(t *testing.T) {
+	root := writeTestLedger(t)
+	writeTestLedgerSource(t, root, "example", "other")
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"issue", "comments", "--ledger", root, "1"}, &stdout, &stderr)
+	if err == nil || !strings.Contains(err.Error(), "exists in multiple sources") {
+		t.Fatalf("Run error = %v, want ambiguity error", err)
+	}
+	stdout.Reset()
+	err = Run(context.Background(), []string{"issue", "comments", "--ledger", root, "--source", "github:example/project", "1"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error with source: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Source           github:example/project") {
+		t.Fatalf("stdout = %q, want selected source", stdout.String())
+	}
+}
+
+func TestPullRequestListCommand(t *testing.T) {
+	root := writeTestLedger(t)
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"pr", "list", "--ledger", root}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	for _, want := range []string{"Pull requests  1", "NUMBER", "#2       closed   pr"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+		}
+	}
+}
+
+func TestPullRequestListSourceFilter(t *testing.T) {
+	root := writeTestLedger(t)
+	writeTestLedgerSource(t, root, "example", "other")
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"pr", "list", "--ledger", root, "--source", "github:example/project"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	for _, want := range []string{"Pull requests  1", "NUMBER", "#2       closed   pr"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+		}
+	}
+	if strings.Contains(stdout.String(), "github:example/other") {
+		t.Fatalf("stdout = %q, want only selected source", stdout.String())
+	}
+}
+
+func TestPullRequestSearchCommand(t *testing.T) {
+	root := writeTestLedger(t)
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"pr", "search", "--ledger", root, "pr"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	for _, want := range []string{"Pull requests  1", "MATCH", "#2       closed   title        pr"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+		}
+	}
+}
+
+func TestPullRequestSearchFields(t *testing.T) {
+	root := writeTestLedger(t)
+	var stdout, stderr bytes.Buffer
+
+	if err := Run(context.Background(), []string{"pr", "search", "--ledger", root, "alice"}, &stdout, &stderr); err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Pull requests  0") {
+		t.Fatalf("stdout = %q, want default search to skip author", stdout.String())
+	}
+	stdout.Reset()
+	if err := Run(context.Background(), []string{"pr", "search", "--ledger", root, "alice", "--field", "author"}, &stdout, &stderr); err != nil {
+		t.Fatalf("Run returned error with author field: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "author") || !strings.Contains(stdout.String(), "Pull requests  1") {
+		t.Fatalf("stdout = %q, want author match", stdout.String())
+	}
+}
+
+func TestPullRequestShowCommand(t *testing.T) {
+	root := writeTestLedger(t)
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"pr", "show", "--ledger", root, "2"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Title          pr") {
+		t.Fatalf("stdout = %q, want PR title", stdout.String())
+	}
+}
+
+func TestPullRequestShowWithComments(t *testing.T) {
+	root := writeTestLedger(t)
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"pr", "show", "--ledger", root, "--with-comments", "2"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	for _, want := range []string{"Title          pr", "Review comments", "review"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+		}
+	}
+}
+
+func TestPullRequestShowRequiresSourceWhenAmbiguous(t *testing.T) {
+	root := writeTestLedger(t)
+	writeTestLedgerSource(t, root, "example", "other")
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"pr", "show", "--ledger", root, "2"}, &stdout, &stderr)
+	if err == nil || !strings.Contains(err.Error(), "exists in multiple sources") {
+		t.Fatalf("Run error = %v, want ambiguity error", err)
+	}
+	stdout.Reset()
+	err = Run(context.Background(), []string{"pr", "show", "--ledger", root, "--source", "github:example/project", "2"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error with source: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Source         github:example/project") {
+		t.Fatalf("stdout = %q, want selected source", stdout.String())
+	}
+}
+
+func TestPullRequestCommentsCommand(t *testing.T) {
+	root := writeTestLedger(t)
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"pr", "comments", "--ledger", root, "2"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Review comments") {
+		t.Fatalf("stdout = %q, want review comments", stdout.String())
+	}
+}
+
+func TestPullRequestTimelineCommand(t *testing.T) {
+	root := writeTestLedger(t)
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"pr", "timeline", "--ledger", root, "2"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	for _, want := range []string{"Pull request", "pull_request.opened", "pull_request.comment", "pull_request.review_comment", "pr conversation", "review"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+		}
+	}
+}
+
+func TestPullRequestCommentsRequiresSourceWhenAmbiguous(t *testing.T) {
+	root := writeTestLedger(t)
+	writeTestLedgerSource(t, root, "example", "other")
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"pr", "comments", "--ledger", root, "2"}, &stdout, &stderr)
+	if err == nil || !strings.Contains(err.Error(), "exists in multiple sources") {
+		t.Fatalf("Run error = %v, want ambiguity error", err)
+	}
+	stdout.Reset()
+	err = Run(context.Background(), []string{"pr", "comments", "--ledger", root, "--source", "github:example/project", "2"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error with source: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Source           github:example/project") {
+		t.Fatalf("stdout = %q, want selected source", stdout.String())
+	}
+}
+
+func TestLabelListCommand(t *testing.T) {
+	root := writeTestLedger(t)
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"label", "list", "--ledger", root}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "bug") {
+		t.Fatalf("stdout = %q, want label", stdout.String())
+	}
+}
+
+func TestLabelListSourceFilter(t *testing.T) {
+	root := writeTestLedger(t)
+	writeTestLedgerSource(t, root, "example", "other")
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"label", "list", "--ledger", root, "--source", "github:example/project"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "bug") {
+		t.Fatalf("stdout = %q, want label", stdout.String())
+	}
+	if strings.Contains(stdout.String(), "github:example/other") {
+		t.Fatalf("stdout = %q, want only selected source", stdout.String())
+	}
+}
+
+func TestMilestoneListCommand(t *testing.T) {
+	root := writeTestLedger(t)
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"milestone", "list", "--ledger", root}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "v1") {
+		t.Fatalf("stdout = %q, want milestone", stdout.String())
+	}
+}
+
+func TestMilestoneListSourceFilter(t *testing.T) {
+	root := writeTestLedger(t)
+	writeTestLedgerSource(t, root, "example", "other")
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"milestone", "list", "--ledger", root, "--source", "github:example/project"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "v1") {
+		t.Fatalf("stdout = %q, want milestone", stdout.String())
+	}
+	if strings.Contains(stdout.String(), "github:example/other") {
+		t.Fatalf("stdout = %q, want only selected source", stdout.String())
+	}
+}
+
+func TestImportProgressOmitsDetailsByDefault(t *testing.T) {
+	var stdout bytes.Buffer
+	printImportProgress(&stdout, githubProgress(true, "Fetching issue #1"), false)
+
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q, want no output", stdout.String())
+	}
+}
+
+func TestImportProgressShowsDetailsWhenVerbose(t *testing.T) {
+	var stdout bytes.Buffer
+	printImportProgress(&stdout, githubProgress(false, "Fetching issues"), true)
+	printImportProgress(&stdout, githubProgress(true, "Fetching issue #1"), true)
+
+	for _, want := range []string{"- Fetching issues...", "  - Fetching issue #1..."} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+		}
+	}
+}
+
+func TestNormalizeImportArgsAllowsBooleanFlagsWithoutValue(t *testing.T) {
+	got, err := normalizeImportArgs([]string{"steadytao/waymark", "--v", "--verbose", "--plain-file-store", "--local"})
+	if err != nil {
+		t.Fatalf("normalizeImportArgs returned error: %v", err)
+	}
+	want := []string{"--v", "--verbose", "--plain-file-store", "--local", "steadytao/waymark"}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Fatalf("normalized args = %v, want %v", got, want)
+	}
+}
+
+func TestNormalizeImportArgsStillRequiresValuesForValueFlags(t *testing.T) {
+	if _, err := normalizeImportArgs([]string{"steadytao/waymark", "--out"}); err == nil {
+		t.Fatal("normalizeImportArgs returned nil error for missing --out value")
+	}
+}
+
+func TestModelOperationUsesRemoteLoginAndOmitsLocalMachineByDefault(t *testing.T) {
+	operation := modelOperation(
+		"github import",
+		[]string{"steadytao/waymark"},
+		time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		time.Date(2026, 1, 1, 0, 1, 0, 0, time.UTC),
+		"steadytao/waymark",
+		".waystone",
+		"stored",
+		"steadytao",
+		false,
+		model.GitHubImport{},
+		ledger.Diff{},
+	)
+
+	if operation.Auth.Login != "steadytao" {
+		t.Fatalf("auth login = %q, want steadytao", operation.Auth.Login)
+	}
+	if operation.Actor.User != "" || operation.Actor.Hostname != "" {
+		t.Fatalf("actor leaked local machine identity: %#v", operation.Actor)
+	}
+}
+
+func githubProgress(detail bool, message string) github.Progress {
+	return github.Progress{Detail: detail, Message: message}
+}
+
+func writeTestLedger(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	writeTestLedgerSource(t, root, "example", "project")
+	return root
+}
+
+func writeEmptyLedger(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "ledger.json"), []byte(`{"version":"waystone.ledger.v1","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`+"\n"), 0o644); err != nil {
+		t.Fatalf("write empty ledger: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "imports", "github"), 0o755); err != nil {
+		t.Fatalf("create imports dir: %v", err)
+	}
+	return root
+}
+
+func writeTestLedgerSource(t *testing.T, root, owner, repo string) {
+	t.Helper()
+	source := model.Source{System: "github", Owner: owner, Repo: repo, URL: "https://github.com/" + owner + "/" + repo}
+	source.Operations = []model.SourceOperationRef{
+		{
+			ID:        "github-import-20260101t000000.000000000z",
+			Command:   "github import",
+			Path:      "operations/github-import-20260101t000000.000000000z.json",
+			StartedAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		},
+	}
+	provenance := model.Provenance{ImportID: "github:example/project", Source: source}
+	createdAt := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	imported := model.GitHubImport{
+		Project: model.Project{
+			ID:        "github:repo:1",
+			Name:      owner + "/" + repo,
+			URL:       source.URL,
+			CreatedAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+			UpdatedAt: time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC),
+		},
+		Source: source,
+		Issues: []model.Issue{
+			{Provenance: provenance, ID: "github:issue:10", SourceID: 10, Number: 1, Title: "issue", Body: "issue body", State: "open", Author: model.Author{Login: "alice"}, OriginalURL: "https://github.com/example/project/issues/1", CreatedAt: createdAt},
+		},
+		Comments: []model.Comment{
+			{Provenance: provenance, ID: "github:issue_comment:20", SourceID: 20, IssueNumber: 1, Author: model.Author{Login: "bob"}, Body: "comment", OriginalURL: "https://github.com/example/project/issues/1#issuecomment-20", CreatedAt: createdAt.Add(time.Hour)},
+			{Provenance: provenance, ID: "github:issue_comment:21", SourceID: 21, IssueNumber: 2, Author: model.Author{Login: "dave"}, Body: "pr conversation", OriginalURL: "https://github.com/example/project/pull/2#issuecomment-21", CreatedAt: createdAt.Add(30 * time.Minute)},
+		},
+		PullRequests: []model.PullRequest{
+			{Provenance: provenance, ID: "github:pull_request:30", SourceID: 30, Number: 2, Title: "pr", Body: "pr body", State: "closed", Author: model.Author{Login: "alice"}, OriginalURL: "https://github.com/example/project/pull/2", CreatedAt: createdAt},
+		},
+		ReviewComments: []model.ReviewComment{
+			{Provenance: provenance, ID: "github:review_comment:40", SourceID: 40, PullRequestNumber: 2, Author: model.Author{Login: "carol"}, Body: "review", OriginalURL: "https://github.com/example/project/pull/2#discussion_r40", CreatedAt: createdAt.Add(time.Hour)},
+		},
+		Labels: []model.Label{
+			{Provenance: provenance, ID: "github:label:50", SourceID: 50, Name: "bug", Description: "Something broken"},
+		},
+		Milestones: []model.Milestone{
+			{Provenance: provenance, ID: "github:milestone:60", SourceID: 60, Number: 1, Title: "v1", State: "open", OriginalURL: "https://github.com/example/project/milestone/1"},
+		},
+	}
+	diff, err := (ledger.Writer{Root: root}).DiffGitHubImport(imported)
+	if err != nil {
+		t.Fatalf("DiffGitHubImport returned error: %v", err)
+	}
+	if err := (ledger.Writer{Root: root}).WriteGitHubImport(imported); err != nil {
+		t.Fatalf("WriteGitHubImport returned error: %v", err)
+	}
+	operation := model.Operation{
+		ID:         "github-import-20260101t000000.000000000z",
+		Command:    "github import",
+		StartedAt:  time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		FinishedAt: time.Date(2026, 1, 1, 0, 1, 0, 0, time.UTC),
+		Actor:      model.OperationActor{Source: "local", User: "tester"},
+		Output:     model.OperationOutput{Ledger: root, Created: diff.Created},
+		Changes:    diff.Changes,
+	}
+	if err := (ledger.Writer{Root: root}).WriteOperation(operation); err != nil {
+		t.Fatalf("WriteOperation returned error: %v", err)
+	}
+}

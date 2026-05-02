@@ -1,0 +1,34 @@
+# local Waystone ledgers
+/.waystone/
+
+# exported local ledgers
+waystone-ledger
+waystone-ledger.*
+
+# log files
+*.log
+
+# artifacts from pprof tooling
+*.prof
+*.test
+
+# coverage artifacts
+coverage.out
+
+# build artifacts and helpers
+bin/
+/waystone
+/waystone.exe
+
+# mac specific
+.DS_Store
+
+# windows specific
+Thumbs.db
+
+# goreleaser artifacts
+dist/
+
+# IDE files
+.idea/
+.vscode/
