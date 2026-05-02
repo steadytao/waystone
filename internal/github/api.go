@@ -13,12 +13,21 @@ type ghUser struct {
 }
 
 type ghRepository struct {
-	ID          int64     `json:"id"`
-	FullName    string    `json:"full_name"`
-	Description string    `json:"description"`
-	HTMLURL     string    `json:"html_url"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID            int64     `json:"id"`
+	FullName      string    `json:"full_name"`
+	Description   string    `json:"description"`
+	HTMLURL       string    `json:"html_url"`
+	DefaultBranch string    `json:"default_branch"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+type ghContent struct {
+	Name     string `json:"name"`
+	Path     string `json:"path"`
+	Type     string `json:"type"`
+	Encoding string `json:"encoding"`
+	Content  string `json:"content"`
 }
 
 type ghIssue struct {

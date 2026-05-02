@@ -5,8 +5,10 @@ package github
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -223,6 +225,55 @@ func (c *Client) get(ctx context.Context, path string, query url.Values, out any
 	}
 
 	return json.NewDecoder(resp.Body).Decode(out)
+}
+
+func (c *Client) getOptional(ctx context.Context, path string, query url.Values, out any) (bool, error) {
+	u := c.baseURL + path
+	if len(query) > 0 {
+		u += "?" + query.Encode()
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return false, err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+	req.Header.Set("User-Agent", "waystone")
+	if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		return false, nil
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		var githubErr struct {
+			Message string `json:"message"`
+		}
+		_ = json.NewDecoder(resp.Body).Decode(&githubErr)
+		if githubErr.Message == "" {
+			githubErr.Message = resp.Status
+		}
+		return false, fmt.Errorf("github request failed for %s: %s", path, githubErr.Message)
+	}
+
+	return true, json.NewDecoder(resp.Body).Decode(out)
+}
+
+func decodeContent(item ghContent) ([]byte, error) {
+	if item.Encoding != "base64" {
+		return nil, fmt.Errorf("unsupported GitHub content encoding %q for %s", item.Encoding, item.Path)
+	}
+	content := strings.ReplaceAll(item.Content, "\n", "")
+	return base64.StdEncoding.DecodeString(content)
 }
 
 func stableID(parts ...string) string {

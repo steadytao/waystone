@@ -28,13 +28,20 @@ Credential rules:
 - the OS credential store is used by default
 - `--plain-file-store` is only a development fallback
 
-## GitHub Import And Refresh
+## GitHub Audit, Import And Refresh
 
 ```sh
+waystone github audit steadytao/waymark
+waystone github audit steadytao/waymark --json
+waystone github audit steadytao/waymark --verbose
 waystone github import steadytao/waymark
 waystone github import steadytao/waymark --v --concurrency 8
 waystone github refresh steadytao/waymark
 ```
+
+Audit inspects GitHub dependency surfaces that can make repository migration harder. The first slice reports workflow files, action references, Dependabot, CodeQL, issue templates, pull request templates and CODEOWNERS.
+
+Audit does not execute workflows or repository code. It does not collect secret values. Use `--verbose` or `-v` to list every action reference; default human output summarises action kinds to avoid noisy reports on large repositories.
 
 Import fetches repository metadata, issues, pull requests, comments, labels, milestones, releases and review comments.
 

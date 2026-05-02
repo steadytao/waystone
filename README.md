@@ -47,6 +47,7 @@ The current prototype includes:
 - GitHub OAuth device flow login
 - `GITHUB_TOKEN` override support
 - GitHub repository import
+- GitHub exit-readiness audit for workflow and project-metadata surfaces
 - local ledger storage under `.waystone/`
 - source manifests for imported repositories
 - issue and pull request browsing
@@ -108,6 +109,11 @@ Authenticate with GitHub:
 waystone github auth login
 ```
 
+Audit GitHub migration surfaces:
+```bash
+waystone github audit steadytao/waymark
+```
+
 Import a repository into the default `.waystone/` ledger:
 ```bash
 waystone github import steadytao/waymark
@@ -142,6 +148,7 @@ Current command groups:
 ```bash
 waystone github auth login
 waystone github auth logout
+waystone github audit owner/repo
 waystone github import owner/repo
 waystone github refresh owner/repo
 
