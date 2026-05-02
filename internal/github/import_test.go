@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 )
@@ -116,13 +117,19 @@ func TestImportRepository(t *testing.T) {
 
 	client := NewClient(server.URL, "", time.Second)
 	var progress []Progress
+	var progressMu sync.Mutex
 	client.WithProgress(func(event Progress) {
+		progressMu.Lock()
+		defer progressMu.Unlock()
 		progress = append(progress, event)
 	})
 	imported, err := client.ImportRepository(context.Background(), "example", "project")
 	if err != nil {
 		t.Fatalf("ImportRepository returned error: %v", err)
 	}
+	progressMu.Lock()
+	progressSnapshot := append([]Progress(nil), progress...)
+	progressMu.Unlock()
 
 	if got := len(imported.Issues); got != 1 {
 		t.Fatalf("issues = %d, want 1", got)
@@ -152,14 +159,14 @@ func TestImportRepository(t *testing.T) {
 	assertProvenance(t, imported.Labels[0].ImportID, imported.Labels[0].Source.System)
 	assertProvenance(t, imported.Milestones[0].ImportID, imported.Milestones[0].Source.System)
 	assertProvenance(t, imported.Releases[0].ImportID, imported.Releases[0].Source.System)
-	if len(progress) == 0 {
+	if len(progressSnapshot) == 0 {
 		t.Fatal("progress callback was not called")
 	}
-	if !hasProgressDetail(progress) {
+	if !hasProgressDetail(progressSnapshot) {
 		t.Fatal("progress callback did not include detail events")
 	}
-	if !hasProgressMessage(progress, "Fetched pull request #2") {
-		t.Fatalf("progress did not include completion event: %#v", progress)
+	if !hasProgressMessage(progressSnapshot, "Fetched pull request #2") {
+		t.Fatalf("progress did not include completion event: %#v", progressSnapshot)
 	}
 }
 
