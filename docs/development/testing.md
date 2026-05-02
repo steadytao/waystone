@@ -29,7 +29,7 @@ Changes should be accompanied by tests when they affect:
 
 ## Testing Principles
 
-Testing in Waystone should favour:
+Testing in Waystone needs to favour:
 - deterministic behaviour
 - explicit expectations
 - narrow and understandable test scope
@@ -85,7 +85,7 @@ Tests should be:
 - directly tied to behaviour that matters
 - maintained alongside the code they protect
 
-Tests should not exist only to inflate numbers or satisfy superficial coverage goals.
+Tests are not useful if they only inflate numbers or satisfy superficial coverage goals.
 
 ## Pull Request Expectations
 

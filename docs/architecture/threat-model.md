@@ -35,17 +35,17 @@ Waystone ledgers, imported GitHub records, events, comments, issue bodies and fu
 
 ## Credential Storage
 
-Waystone should not persist environment-provided tokens.
+Waystone won't persist environment-provided tokens.
 
-For GitHub imports, `GITHUB_TOKEN` takes precedence and remains process-local. OAuth device-flow tokens should be stored in the operating system credential store by default. Plaintext file storage is only acceptable as an explicit development fallback and should be visibly labelled as such in the CLI.
+For GitHub imports, `GITHUB_TOKEN` takes precedence and remains process-local. OAuth device-flow tokens should be stored in the operating system credential store by default. Plaintext file storage is only acceptable as an explicit development fallback and needs to be visibly labelled as such in the CLI.
 
-Waystone should provide a logout command that deletes stored credentials. Future implementations should avoid broad OAuth scopes by default and should not store refresh tokens unless a concrete workflow requires them.
+Waystone needs a logout command that deletes stored credentials. Future implementations should avoid broad OAuth scopes by default and won't store refresh tokens unless a concrete workflow requires them.
 
-Operation records should be privacy-minimal by default. They may record project-facing Git identity and authenticated provider login but they should not store local OS username or hostname unless the user explicitly opts in.
+Operation records need to be privacy-minimal by default. They may record project-facing Git identity and authenticated provider login but won't store local OS username or hostname unless the user explicitly opts in.
 
 ## Trust Model
 
-Waystone should separate:
+Waystone needs to separate:
 - valid signatures
 - trusted identities
 - authorised maintainers
@@ -55,7 +55,7 @@ A valid signature only proves authorship. It does not prove that the event shoul
 
 ## Authority Controls
 
-The project should define which identities can perform authority-bearing actions.
+The project needs to define which identities can perform authority-bearing actions.
 
 Examples:
 - maintainers can close issues

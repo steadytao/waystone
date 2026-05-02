@@ -1,10 +1,10 @@
 # Git Is Distributed. Collaboration Is Not.
 
-Waystone is a design for portable project history around Git repositories.
+Waystone is my current design for portable project history around Git repositories.
 
-Source code can move between Git remotes. Project memory usually cannot. Issues, comments, reviews, patch discussions, release notes, labels, milestones and maintainer decisions are commonly trapped inside one forge.
+The starting observation is simple: source code can move between Git remotes, but project memory usually cannot. Issues, comments, reviews, patch discussions, release notes, labels, milestones and maintainer decisions are commonly trapped inside one forge.
 
-Waystone does not try to build another forge. It makes collaboration history portable first.
+I don't want Waystone to become another forge. The useful version is narrower: make collaboration history portable first.
 
 ## Product Boundary
 
@@ -34,7 +34,7 @@ Out of scope for v0:
 
 ## Design Principles
 
-Waystone should be:
+I want Waystone to stay:
 - local first
 - deterministic
 - inspectable
@@ -56,20 +56,20 @@ The first ledger format is a `.waystone/` directory:
   operations/
 ```
 
-This directory is canonical for the first milestone. Archive export packages the same logical ledger; it does not define a separate source of truth.
+I'm treating this directory as canonical for the first milestone. Archive export packages the same logical ledger; it does not define a separate source of truth.
 
-Git refs are a later option:
+Git refs are still a later option:
 ```text
 refs/waystone/v1/events/*
 refs/waystone/v1/identities/*
 refs/waystone/v1/project
 ```
 
-That decision should wait until import, projection and local workflows expose real constraints.
+I'm deferring that decision until import, projection and local workflows expose real constraints.
 
 ## Trust And Authority
 
-Waystone must keep three ideas separate:
+Waystone needs to keep three ideas separate:
 - authorship proves who created a record or event
 - trust says whether the project recognises an identity
 - authority says whether an action affects canonical state
@@ -107,7 +107,7 @@ waystone patch submit
 waystone review add
 ```
 
-`waystone serve` should not exist until the CLI, ledger model and projection rules are stable.
+I'm not adding `waystone serve` until the CLI, ledger model and projection rules are stable.
 
 ## First Useful Feature
 
@@ -129,4 +129,4 @@ The importer preserves:
 - external author identities
 - original GitHub URLs
 
-Round-tripping back to GitHub is not part of the first milestone.
+I'm not doing round-tripping back to GitHub in the first milestone. That would turn a preservation tool into a live forge-integration tool too early.

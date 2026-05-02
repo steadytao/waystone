@@ -50,15 +50,46 @@ func TestExportImportArchiveRoundTrip(t *testing.T) {
 	}
 }
 
-func TestImportArchiveRejectsUnsafePath(t *testing.T) {
-	archive := filepath.Join(t.TempDir(), "bad.tar.zst")
-	if err := writeTestArchive(archive, "../evil.json", []byte("{}\n")); err != nil {
-		t.Fatalf("writeTestArchive returned error: %v", err)
+func TestImportArchiveRejectsUnsafePaths(t *testing.T) {
+	tests := []string{
+		"..",
+		"../evil.json",
+		"/evil.json",
+		`..\evil.json`,
+		`C:/evil.json`,
+		`C:\evil.json`,
 	}
+	for _, name := range tests {
+		t.Run(name, func(t *testing.T) {
+			archive := filepath.Join(t.TempDir(), "bad.tar.zst")
+			if err := writeTestArchive(archive, name, []byte("{}\n")); err != nil {
+				t.Fatalf("writeTestArchive returned error: %v", err)
+			}
 
-	err := ImportArchive(archive, filepath.Join(t.TempDir(), ".waystone"))
-	if err == nil {
-		t.Fatal("ImportArchive returned nil error for unsafe path")
+			err := ImportArchive(archive, filepath.Join(t.TempDir(), ".waystone"))
+			if err == nil {
+				t.Fatal("ImportArchive returned nil error for unsafe path")
+			}
+		})
+	}
+}
+
+func TestSafeRootedPathRejectsTraversal(t *testing.T) {
+	root := t.TempDir()
+	tests := []string{
+		"..",
+		"../evil.json",
+		"/evil.json",
+		`..\evil.json`,
+		`C:/evil.json`,
+		`C:\evil.json`,
+	}
+	for _, name := range tests {
+		t.Run(name, func(t *testing.T) {
+			if _, err := SafeRootedPath(root, name); err == nil {
+				t.Fatal("SafeRootedPath returned nil error")
+			}
+		})
 	}
 }
 

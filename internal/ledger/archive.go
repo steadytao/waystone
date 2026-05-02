@@ -152,8 +152,14 @@ func ExportSourceArchive(root, sourceSpec, archivePath string) error {
 		return err
 	}
 	for _, object := range currentSource.Objects {
-		from := filepath.Join(root, filepath.FromSlash(object.Path))
-		to := filepath.Join(staging, filepath.FromSlash(object.Path))
+		from, err := SafeRootedPath(root, object.Path)
+		if err != nil {
+			return err
+		}
+		to, err := SafeRootedPath(staging, object.Path)
+		if err != nil {
+			return err
+		}
 		if err := copyFile(from, to); err != nil {
 			return err
 		}
@@ -230,11 +236,10 @@ func extractArchive(archivePath, root string) error {
 		if err != nil {
 			return err
 		}
-		name, err := cleanArchivePath(header.Name)
+		target, err := SafeRootedPath(root, header.Name)
 		if err != nil {
 			return err
 		}
-		target := filepath.Join(root, filepath.FromSlash(name))
 		switch header.Typeflag {
 		case tar.TypeReg:
 			if header.Size < 0 || header.Size > maxArchiveEntryBytes {
@@ -285,10 +290,36 @@ func copyFile(from, to string) error {
 func cleanArchivePath(name string) (string, error) {
 	name = strings.ReplaceAll(name, "\\", "/")
 	cleaned := path.Clean(name)
-	if cleaned == "." || strings.HasPrefix(cleaned, "../") || strings.HasPrefix(cleaned, "/") || strings.Contains(cleaned, "/../") {
-		return "", fmt.Errorf("unsafe archive path %q", name)
+	if cleaned == "." ||
+		cleaned == ".." ||
+		strings.HasPrefix(cleaned, "../") ||
+		strings.HasPrefix(cleaned, "/") ||
+		strings.Contains(cleaned, "/../") ||
+		strings.Contains(cleaned, ":") ||
+		!filepath.IsLocal(filepath.FromSlash(cleaned)) {
+		return "", fmt.Errorf("unsafe path %q", name)
 	}
 	return cleaned, nil
+}
+
+func SafeRootedPath(root, name string) (string, error) {
+	cleaned, err := cleanArchivePath(name)
+	if err != nil {
+		return "", err
+	}
+	absoluteRoot, err := filepath.Abs(root)
+	if err != nil {
+		return "", err
+	}
+	target := filepath.Join(absoluteRoot, filepath.FromSlash(cleaned))
+	relative, err := filepath.Rel(absoluteRoot, target)
+	if err != nil {
+		return "", err
+	}
+	if relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) || filepath.IsAbs(relative) {
+		return "", fmt.Errorf("unsafe path %q", name)
+	}
+	return target, nil
 }
 
 func ensureEmptyOrMissing(root string) error {

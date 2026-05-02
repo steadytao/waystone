@@ -1,10 +1,14 @@
 # Roadmap
 
-Waystone should move in strict phases. Each phase should prove one layer before expanding the product.
+This roadmap is written as maintainer notes, not as a promise that every phase will happen exactly this way.
+
+The main constraint I want to preserve is sequencing. I need to prove one layer before expanding the product.
 
 ## Phase 0: Design Pack
 
 Status: current phase.
+
+I'm keeping the first public shape small: enough documentation to explain the project, enough code to prove the import and ledger model and enough CI to keep the repo honest.
 
 Deliverables:
 - `README.md`
@@ -42,9 +46,9 @@ Import:
 - external author identities
 - original GitHub URLs
 
-Storage starts with deterministic `.waystone/` files, not Git refs. The `.waystone/` directory is canonical; archives package that ledger rather than replacing it.
+I'm starting with deterministic `.waystone/` files, not Git refs. The `.waystone/` directory is the canonical ledger for now; archives package that ledger rather than replacing it.
 
-This phase is read-only import. GitHub export and round-tripping are not part of this phase.
+This phase is read-only import. I'm not doing GitHub export or round-tripping here because import needs to be boring and trustworthy first.
 
 ## Phase 2: Local Issue Ledger
 
@@ -64,7 +68,7 @@ waystone issue comment <id>
 waystone issue close <id>
 ```
 
-This phase adds local signed records after the imported ledger model has proven useful.
+I'll only add local signed records after the imported ledger model has proven useful. Otherwise the project will be designing local authority rules before it has enough real data.
 
 ## Phase 3: Patches And Reviews
 
@@ -80,7 +84,7 @@ waystone patch status
 waystone review add
 ```
 
-This phase should wait until imported records, local issues, identities and authority are stable.
+I'm deferring this until imported records, local issues, identities and authority are stable. Review records are useful but they multiply edge cases quickly.
 
 ## Phase 4: Sync
 
@@ -97,7 +101,7 @@ Possible transports:
 - Radicle bridge
 - ForgeFed bridge
 
-Do not decide the sync model before Phase 1 and Phase 2 produce real constraints.
+I won't decide the sync model before Phase 1 and Phase 2 produce real constraints. Git refs are attractive, but choosing them too early risks designing around a storage preference instead of a workflow.
 
 ## Phase 5: Web Viewer
 
@@ -111,11 +115,11 @@ Candidate command:
 waystone serve
 ```
 
-This should be a viewer over local projected state, not a hosted forge.
+This should stay a viewer over local projected state, not a hosted forge. I'm deferring it because a web UI can make an immature data model look more finished than it is.
 
 ## Deferred Work
 
-Do not build these early:
+I won't build these early:
 - hosted forge
 - CI
 - federation
@@ -123,3 +127,5 @@ Do not build these early:
 - attachment hosting
 - GitHub export before GitHub import
 - review workflows before issue workflows
+
+Those are not rejected forever. They are deferred because the current project risk is scope creep, not lack of possible features.

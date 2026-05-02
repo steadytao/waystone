@@ -14,3 +14,22 @@ func TestParseSourceSpecAllowsWaystoneNamespace(t *testing.T) {
 		t.Fatalf("source = %#v, want waystone:example/project", source)
 	}
 }
+
+func TestParseSourceSpecRejectsUnsafeComponents(t *testing.T) {
+	tests := []string{
+		"github:../project",
+		"github:example/../project",
+		"github:example/project/extra",
+		"github:/project",
+		"github:example/",
+		"github:C:/project",
+		"github:example/C:\\project",
+	}
+	for _, spec := range tests {
+		t.Run(spec, func(t *testing.T) {
+			if _, err := ParseSourceSpec(spec); err == nil {
+				t.Fatal("ParseSourceSpec returned nil error")
+			}
+		})
+	}
+}
