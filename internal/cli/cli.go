@@ -1661,6 +1661,8 @@ func runGitHub(ctx context.Context, args []string, stdout, stderr io.Writer) err
 	}
 
 	switch args[0] {
+	case "audit":
+		return runGitHubAudit(ctx, args[1:], stdout)
 	case "auth":
 		return runGitHubAuth(ctx, args[1:], stdout, stderr)
 	case "import":
@@ -1671,6 +1673,62 @@ func runGitHub(ctx context.Context, args []string, stdout, stderr io.Writer) err
 		printGitHubUsage(stderr)
 		return fmt.Errorf("unknown github command %q", args[0])
 	}
+}
+
+func runGitHubAudit(ctx context.Context, args []string, stdout io.Writer) error {
+	fs := flag.NewFlagSet("waystone github audit", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+
+	tokenEnv := fs.String("token-env", "GITHUB_TOKEN", "environment variable containing a GitHub token")
+	apiBase := fs.String("api-base", "https://api.github.com", "GitHub API base URL")
+	timeout := fs.Duration("timeout", 2*time.Minute, "request timeout")
+	plainFileStore := fs.Bool("plain-file-store", false, "read stored token from a plaintext local file instead of the OS credential store")
+	jsonOutput := fs.Bool("json", false, "write JSON output")
+	verbose := fs.Bool("verbose", false, "show detailed audit evidence")
+	verboseShort := fs.Bool("v", false, "show detailed audit evidence")
+
+	normalizedArgs, err := normalizeSingleValueCommandArgs(args, "repository", map[string]bool{
+		"--json":             true,
+		"-json":              true,
+		"--verbose":          true,
+		"-verbose":           true,
+		"--v":                true,
+		"-v":                 true,
+		"--plain-file-store": true,
+		"-plain-file-store":  true,
+	})
+	if err != nil {
+		return err
+	}
+	if err := fs.Parse(normalizedArgs); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		return errors.New("usage: waystone github audit [flags] owner/repo")
+	}
+	owner, repo, err := parseRepo(fs.Arg(0))
+	if err != nil {
+		return err
+	}
+	token := githubTokenFromEnvironment(*tokenEnv)
+	if token == "" {
+		store, err := credentialStore(*plainFileStore)
+		if err == nil {
+			stored, err := store.GitHubToken()
+			if err == nil {
+				token = stored.AccessToken
+			}
+		}
+	}
+	audit, err := github.NewClient(*apiBase, token, *timeout).AuditRepository(ctx, owner, repo)
+	if err != nil {
+		return err
+	}
+	if *jsonOutput {
+		return writeJSONOutput(stdout, audit)
+	}
+	writeGitHubAudit(stdout, audit, *verbose || *verboseShort)
+	return nil
 }
 
 func runGitHubImport(ctx context.Context, args []string, stdout io.Writer, command string) error {
@@ -2449,6 +2507,80 @@ func printImportProgress(w io.Writer, progress github.Progress, verbose bool) {
 	fmt.Fprintf(w, "- %s...\n", progress.Message)
 }
 
+func writeGitHubAudit(w io.Writer, audit model.GitHubAudit, verbose bool) {
+	writeField(w, "Repository", audit.Repository.FullName)
+	writeField(w, "URL", audit.Repository.URL)
+	writeField(w, "Default branch", audit.Repository.DefaultBranch)
+	fmt.Fprintln(w)
+
+	fmt.Fprintln(w, "Portable")
+	for _, item := range audit.Portable {
+		fmt.Fprintf(w, "- %s\n", item)
+	}
+	fmt.Fprintln(w)
+
+	fmt.Fprintln(w, "Needs migration plan")
+	if len(audit.NeedsMigrationPlan) == 0 {
+		fmt.Fprintln(w, "- none detected in this audit slice")
+	} else {
+		for _, item := range audit.NeedsMigrationPlan {
+			fmt.Fprintf(w, "- %s\n", item)
+		}
+	}
+	fmt.Fprintln(w)
+
+	fmt.Fprintln(w, "Evidence")
+	if len(audit.Workflows) == 0 && len(audit.Actions) == 0 {
+		fmt.Fprintln(w, "- no workflow evidence found")
+	} else {
+		for _, workflow := range audit.Workflows {
+			fmt.Fprintf(w, "- workflow %s\n", workflow.Path)
+		}
+		writeActionSummary(w, audit.Actions)
+		if verbose {
+			for _, action := range audit.Actions {
+				fmt.Fprintf(w, "- action %s (%s, %s)\n", action.Value, action.Kind, action.Workflow)
+			}
+		}
+	}
+	writePresence(w, "Dependabot", audit.Dependabot)
+	writePresence(w, "CodeQL", audit.CodeQL)
+	writePresence(w, "Issue templates", audit.IssueTemplates)
+	writePresence(w, "Pull request template", audit.PullRequestTemplate)
+	writePresence(w, "CODEOWNERS", audit.Codeowners)
+	fmt.Fprintln(w)
+
+	fmt.Fprintln(w, "Limitations")
+	for _, limitation := range audit.Limitations {
+		fmt.Fprintf(w, "- %s\n", limitation)
+	}
+}
+
+func writeActionSummary(w io.Writer, actions []model.GitHubActionUse) {
+	if len(actions) == 0 {
+		return
+	}
+	counts := map[string]int{}
+	for _, action := range actions {
+		counts[action.Kind]++
+	}
+	fmt.Fprintln(w, "- Actions")
+	for _, kind := range []string{"remote", "local", "reusable_workflow"} {
+		if counts[kind] > 0 {
+			fmt.Fprintf(w, "  - %s %d\n", kind, counts[kind])
+		}
+	}
+}
+
+func writePresence(w io.Writer, label string, presence model.GitHubAuditPresence) {
+	if !presence.Present {
+		return
+	}
+	for _, path := range presence.Paths {
+		fmt.Fprintf(w, "- %s %s\n", label, path)
+	}
+}
+
 func modelOperation(command string, args []string, startedAt, finishedAt time.Time, source, root, authMode, authLogin string, includeLocal bool, imported model.GitHubImport, diff ledger.Diff) model.Operation {
 	return model.Operation{
 		ID:         ledger.NewOperationID(command, startedAt),
@@ -2809,6 +2941,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage:")
 	fmt.Fprintln(w, "  waystone github auth login [flags]")
 	fmt.Fprintln(w, "  waystone github auth logout [flags]")
+	fmt.Fprintln(w, "  waystone github audit [flags] owner/repo")
 	fmt.Fprintln(w, "  waystone github import [flags] owner/repo")
 	fmt.Fprintln(w, "  waystone github refresh [flags] owner/repo")
 	fmt.Fprintln(w, "  waystone issue list [flags]")
@@ -2846,6 +2979,7 @@ func printGitHubUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage:")
 	fmt.Fprintln(w, "  waystone github auth login [flags]")
 	fmt.Fprintln(w, "  waystone github auth logout [flags]")
+	fmt.Fprintln(w, "  waystone github audit [flags] owner/repo")
 	fmt.Fprintln(w, "  waystone github import [flags] owner/repo")
 	fmt.Fprintln(w, "  waystone github refresh [flags] owner/repo")
 }

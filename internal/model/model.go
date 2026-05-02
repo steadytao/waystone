@@ -18,6 +18,58 @@ type GitHubImport struct {
 	Releases       []Release       `json:"releases"`
 }
 
+type GitHubAudit struct {
+	Repository          GitHubAuditRepository     `json:"repository"`
+	Source              Source                    `json:"source"`
+	GeneratedAt         time.Time                 `json:"generated_at"`
+	Portable            []string                  `json:"portable"`
+	NeedsMigrationPlan  []string                  `json:"needs_migration_plan"`
+	Unsupported         []string                  `json:"unsupported,omitempty"`
+	Warnings            []string                  `json:"warnings,omitempty"`
+	Limitations         []string                  `json:"limitations,omitempty"`
+	Workflows           []GitHubWorkflow          `json:"workflows,omitempty"`
+	Actions             []GitHubActionUse         `json:"actions,omitempty"`
+	Dependabot          GitHubAuditPresence       `json:"dependabot"`
+	CodeQL              GitHubAuditPresence       `json:"codeql"`
+	IssueTemplates      GitHubAuditPresence       `json:"issue_templates"`
+	PullRequestTemplate GitHubAuditPresence       `json:"pull_request_template"`
+	Codeowners          GitHubAuditPresence       `json:"codeowners"`
+	Evidence            []GitHubAuditEvidenceItem `json:"evidence,omitempty"`
+}
+
+type GitHubAuditRepository struct {
+	ID            int64     `json:"id"`
+	FullName      string    `json:"full_name"`
+	Description   string    `json:"description,omitempty"`
+	URL           string    `json:"url"`
+	DefaultBranch string    `json:"default_branch,omitempty"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+type GitHubWorkflow struct {
+	Name    string `json:"name"`
+	Path    string `json:"path"`
+	Actions int    `json:"actions"`
+}
+
+type GitHubActionUse struct {
+	Workflow string `json:"workflow"`
+	Value    string `json:"value"`
+	Kind     string `json:"kind"`
+}
+
+type GitHubAuditPresence struct {
+	Present bool     `json:"present"`
+	Paths   []string `json:"paths,omitempty"`
+}
+
+type GitHubAuditEvidenceItem struct {
+	Type string `json:"type"`
+	Path string `json:"path,omitempty"`
+	Name string `json:"name,omitempty"`
+}
+
 type Ledger struct {
 	Version       string    `json:"version"`
 	CreatedAt     time.Time `json:"created_at"`

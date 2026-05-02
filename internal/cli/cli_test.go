@@ -6,7 +6,11 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -67,6 +71,78 @@ func TestGitHubAuthUsage(t *testing.T) {
 	err := Run(context.Background(), []string{"github", "auth"}, &stdout, &stderr)
 	if err == nil || !strings.Contains(stderr.String(), "waystone github auth login") {
 		t.Fatalf("stderr = %q err = %v, want github auth usage", stderr.String(), err)
+	}
+}
+
+func TestGitHubAuditCommandPrintsExitReadinessReport(t *testing.T) {
+	apiBase := githubAuditTestServer(t)
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"github", "audit", "--api-base", apiBase, "example/project"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error: %v stderr=%q", err, stderr.String())
+	}
+
+	output := stdout.String()
+	for _, want := range []string{
+		"Repository",
+		"example/project",
+		"Portable",
+		"- issues",
+		"Needs migration plan",
+		"- GitHub Actions workflows",
+		"Evidence",
+		"- workflow .github/workflows/ci.yml",
+		"Actions",
+		"remote 1",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("stdout = %q, want %q", output, want)
+		}
+	}
+	if strings.Contains(output, "- action actions/checkout@v4") {
+		t.Fatalf("stdout = %q, did not expect verbose action listing", output)
+	}
+}
+
+func TestGitHubAuditCommandVerbosePrintsActionEvidence(t *testing.T) {
+	apiBase := githubAuditTestServer(t)
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"github", "audit", "--api-base", apiBase, "--verbose", "example/project"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error: %v stderr=%q", err, stderr.String())
+	}
+
+	if !strings.Contains(stdout.String(), "- action actions/checkout@v4") {
+		t.Fatalf("stdout = %q, want verbose action evidence", stdout.String())
+	}
+}
+
+func TestGitHubAuditCommandWritesJSON(t *testing.T) {
+	apiBase := githubAuditTestServer(t)
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"github", "audit", "--api-base", apiBase, "--json", "example/project"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error: %v stderr=%q", err, stderr.String())
+	}
+	var payload struct {
+		Repository struct {
+			FullName string `json:"full_name"`
+		} `json:"repository"`
+		Workflows []struct {
+			Path string `json:"path"`
+		} `json:"workflows"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("decoding JSON output: %v\n%s", err, stdout.String())
+	}
+	if payload.Repository.FullName != "example/project" {
+		t.Fatalf("repository = %q, want example/project", payload.Repository.FullName)
+	}
+	if len(payload.Workflows) != 1 {
+		t.Fatalf("workflows = %d, want 1", len(payload.Workflows))
 	}
 }
 
@@ -1007,5 +1083,38 @@ func writeTestLedgerSource(t *testing.T, root, owner, repo string) {
 	}
 	if err := (ledger.Writer{Root: root}).WriteOperation(operation); err != nil {
 		t.Fatalf("WriteOperation returned error: %v", err)
+	}
+}
+
+func githubAuditTestServer(t *testing.T) string {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/repos/example/project":
+			fmt.Fprint(w, `{"id":1,"full_name":"example/project","description":"test project","html_url":"https://github.com/example/project","default_branch":"main","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-02T00:00:00Z"}`)
+		case "/repos/example/project/contents/.github/workflows":
+			fmt.Fprint(w, `[{"name":"ci.yml","path":".github/workflows/ci.yml","type":"file"}]`)
+		case "/repos/example/project/contents/.github/workflows/ci.yml":
+			writeCLIContent(t, w, ".github/workflows/ci.yml", "name: CI\njobs:\n  test:\n    steps:\n      - uses: actions/checkout@v4\n")
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+	return server.URL
+}
+
+func writeCLIContent(t *testing.T, w http.ResponseWriter, path, content string) {
+	t.Helper()
+	payload := map[string]string{
+		"name":     path,
+		"path":     path,
+		"type":     "file",
+		"encoding": "base64",
+		"content":  base64.StdEncoding.EncodeToString([]byte(content)),
+	}
+	if err := json.NewEncoder(w).Encode(payload); err != nil {
+		t.Fatalf("encode content: %v", err)
 	}
 }
