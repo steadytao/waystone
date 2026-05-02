@@ -191,3 +191,29 @@ func TestVerifyOperationsDetectsRecordedFileTampering(t *testing.T) {
 		t.Fatalf("VerifyOperations error = %v, want hash mismatch", err)
 	}
 }
+
+func TestVerifyOperationsRejectsUnsafeChangePath(t *testing.T) {
+	root := t.TempDir()
+	writer := Writer{Root: root}
+	operation := model.Operation{
+		ID:         NewOperationID("unsafe operation", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)),
+		Command:    "unsafe operation",
+		StartedAt:  time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		FinishedAt: time.Date(2026, 1, 1, 0, 1, 0, 0, time.UTC),
+		Output:     model.OperationOutput{Ledger: root},
+		Changes: []model.ObjectChange{{
+			Type:   "created",
+			Object: "issue",
+			Path:   "../evil.json",
+			SHA256: strings.Repeat("0", 64),
+		}},
+	}
+	if err := writer.WriteOperation(operation); err != nil {
+		t.Fatalf("WriteOperation returned error: %v", err)
+	}
+
+	_, err := (Reader{Root: root}).VerifyOperations()
+	if err == nil || !strings.Contains(err.Error(), "unsafe path") {
+		t.Fatalf("VerifyOperations error = %v, want unsafe path error", err)
+	}
+}

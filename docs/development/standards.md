@@ -6,7 +6,7 @@ These standards exist to keep the codebase understandable, reviewable and approp
 
 ## Purpose
 
-Waystone should not accumulate code faster than it accumulates clarity.
+Waystone can't accumulate code faster than it accumulates clarity.
 
 The purpose of these standards is to ensure that contributions are:
 - understandable
@@ -27,9 +27,9 @@ Contributions should:
 
 ## Scope Discipline
 
-Code that expands Waystone beyond portable project history for Git repositories should not be added casually.
+I don't want code that expands Waystone beyond portable project history for Git repositories to be added casually.
 
-If a change materially affects project scope, trust assumptions, ledger semantics, archive behaviour or public commands, it should be discussed and may require a recorded decision.
+If a change materially affects project scope, trust assumptions, ledger semantics, archive behaviour or public commands, it needs discussion and may require a recorded decision.
 
 ## Readability
 

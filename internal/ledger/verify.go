@@ -191,7 +191,11 @@ func (r Reader) VerifyOperations() (OperationVerification, error) {
 }
 
 func (r Reader) fileHash(relative string) (string, error) {
-	data, err := os.ReadFile(filepath.Join(r.Root, filepath.FromSlash(relative)))
+	path, err := SafeRootedPath(r.Root, relative)
+	if err != nil {
+		return "", err
+	}
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return "", err
 	}

@@ -2006,7 +2006,11 @@ func sourceStatuses(reader ledger.Reader, staleAfter time.Duration, now time.Tim
 
 func inspectSource(root string, source model.Source, staleAfter time.Duration, now time.Time) (sourceInspection, error) {
 	manifestPath := ledger.SourcePath(source)
-	manifestHash, err := fileSHA256(filepath.Join(root, filepath.FromSlash(manifestPath)))
+	manifestFile, err := ledger.SafeRootedPath(root, manifestPath)
+	if err != nil {
+		return sourceInspection{}, err
+	}
+	manifestHash, err := fileSHA256(manifestFile)
 	if err != nil {
 		return sourceInspection{}, err
 	}
@@ -2036,7 +2040,11 @@ func inspectSource(root string, source model.Source, staleAfter time.Duration, n
 	}
 	for _, ref := range source.Objects {
 		inspection.ObjectTypes[ref.Object]++
-		sum, err := fileSHA256(filepath.Join(root, filepath.FromSlash(ref.Path)))
+		objectFile, err := ledger.SafeRootedPath(root, ref.Path)
+		if err != nil {
+			return sourceInspection{}, err
+		}
+		sum, err := fileSHA256(objectFile)
 		if err != nil {
 			if os.IsNotExist(err) {
 				inspection.MissingObjects++
@@ -2489,6 +2497,9 @@ func parseRepo(value string) (string, string, error) {
 	parts := strings.Split(value, "/")
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 		return "", "", fmt.Errorf("repository must be owner/repo, got %q", value)
+	}
+	if _, err := ledger.ParseSourceSpec("github:" + value); err != nil {
+		return "", "", fmt.Errorf("repository must be safe owner/repo, got %q", value)
 	}
 	return parts[0], parts[1], nil
 }

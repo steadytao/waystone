@@ -123,7 +123,7 @@ Candidate fields:
 - merged timestamp where available
 - original URL
 
-Waystone should not recreate GitHub's full pull request workflow in v0.
+Waystone won't recreate GitHub's full pull request workflow in v0.
 
 ## Review Comment
 
