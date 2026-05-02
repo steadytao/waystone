@@ -195,7 +195,7 @@ func (r Reader) fileHash(relative string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- path is validated by SafeRootedPath before reading.
 	if err != nil {
 		return "", err
 	}
