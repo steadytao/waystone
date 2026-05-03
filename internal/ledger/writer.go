@@ -204,29 +204,6 @@ func (w Writer) RecordSourceOperation(source model.Source, operation model.Opera
 	return writeJSON(path, current)
 }
 
-func (w Writer) recordSourceObject(source model.Source, target writeTarget) error {
-	var current model.Source
-	path := filepath.Join(w.Root, sourceManifestPath(source))
-	if err := readJSONFile(path, &current); err != nil {
-		if !os.IsNotExist(err) {
-			return err
-		}
-		current = source
-	}
-	ref, err := sourceObjectRef(target)
-	if err != nil {
-		return err
-	}
-	for i, existing := range current.Objects {
-		if existing.Path == ref.Path {
-			current.Objects[i] = ref
-			return writeJSON(path, current)
-		}
-	}
-	current.Objects = append(current.Objects, ref)
-	return writeJSON(path, current)
-}
-
 func sourceObjectRef(target writeTarget) (model.SourceObjectRef, error) {
 	data, err := canonicalJSON(target.value)
 	if err != nil {
