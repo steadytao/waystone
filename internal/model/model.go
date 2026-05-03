@@ -124,6 +124,7 @@ type Source struct {
 	URL        string               `json:"url"`
 	Objects    []SourceObjectRef    `json:"objects,omitempty"`
 	Operations []SourceOperationRef `json:"operations,omitempty"`
+	Signature  *OperationSignature  `json:"signature,omitempty"`
 }
 
 type SourceObjectRef struct {

@@ -98,6 +98,9 @@ Signed operation records also include a signature. The signature covers the
 same canonical operation representation, with `operation_hash` and `signature`
 empty.
 
+Signed source manifests include a signature over source identity, object refs
+and operation refs, with `signature` empty.
+
 ## Strict Verification
 
 ```sh
@@ -113,9 +116,9 @@ Strict verification checks:
 
 Strict verification detects local tampering and accidental edits. It does not prove that the original remote forge content was correct.
 
-`--signatures` additionally verifies operation signatures. Unsigned records are
-reported because early ledgers may predate signing. Invalid signatures are
-integrity failures.
+`--signatures` additionally verifies operation signatures and source manifest
+signatures. Unsigned records are reported because early ledgers may predate
+signing. Invalid signatures are integrity failures.
 
 ## Archives
 

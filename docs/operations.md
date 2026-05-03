@@ -66,7 +66,8 @@ The chain is append-only by convention. A future compaction command must define 
 
 ## Signing
 
-If a default signing identity exists, Waystone signs new operation records.
+If a default signing identity exists, Waystone signs new operation records and
+source manifests.
 
 The signature uses the same canonical operation representation as `operation_hash`, with both `operation_hash` and `signature` empty.
 
@@ -77,6 +78,7 @@ waystone ledger verify --strict --signatures
 
 `identity init` writes a signed operation record after creating the identity.
 
-Unsigned records are reported but remain readable. Invalid signatures fail verification.
+Unsigned operation records and source manifests are reported but remain
+readable. Invalid signatures fail verification.
 
 Signing must not make local OS username or hostname implicit. Privacy defaults must remain unchanged.

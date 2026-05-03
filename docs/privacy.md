@@ -29,7 +29,7 @@ GitHub operations may record authenticated GitHub login. They do not record the 
 ## Signing Identities
 
 `waystone identity init` creates a local Ed25519 signing identity for operation
-records.
+records and source manifests.
 
 The public identity is stored in the ledger. Private signing material is local
 key material and is excluded from ledger exports.

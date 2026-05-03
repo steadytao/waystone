@@ -56,7 +56,7 @@ The current prototype includes:
 - local issue and pull request search
 - operation records for ledger-changing and verification commands
 - object hashes and strict ledger verification
-- local Ed25519 signing for new operation records
+- local Ed25519 signing for new operation records and source manifests
 - ledger archive export, inspection and import
 - GoReleaser-based release structure with checksums, SBOMs and Sigstore bundles
 
@@ -70,7 +70,7 @@ Waystone currently aims to be:
 - a portable record format for Git repository collaboration data
 - a migration aid for projects moving between forges
 - a preservation tool for project context around code
-- a foundation for future signed source manifests and archives
+- a foundation for future signed archive manifests and archives
 
 The narrow product thesis is:
 ```text
@@ -225,6 +225,7 @@ The ledger is intended to preserve:
 - object hashes for local integrity checking
 - operation-chain links for strict verification
 - operation signatures when a local identity exists
+- source manifest signatures when a local identity exists
 
 Sources are repo-specific namespaces. GitHub imports use `github:owner/repo`; `waystone:owner/repo` is reserved for future local Waystone records. Issue, pull request and milestone numbers are source-local, so overlapping numbers across sources do not imply the same record.
 
@@ -263,7 +264,7 @@ Operation records may include the authenticated GitHub login. Local OS username 
 
 Waystone does not claim that local hashes, operation chains or signatures prevent a user with filesystem access from editing the ledger. They provide detection for accidental edits, unsynchronised local mutation and invalid operation signatures.
 
-`waystone identity init` creates a local Ed25519 identity for operation signing. Public identity metadata is stored in the ledger. Private signing material is local key material and is excluded from ledger exports.
+`waystone identity init` creates a local Ed25519 identity for operation and source manifest signing. Public identity metadata is stored in the ledger. Private signing material is local key material and is excluded from ledger exports.
 
 ## Documentation
 

@@ -110,6 +110,9 @@ func TestIdentityInitShowAndOperationSigning(t *testing.T) {
 	if !strings.Contains(stdout.String(), "Signatures") || !strings.Contains(stdout.String(), "Unsigned") {
 		t.Fatalf("stdout = %q, want signature verification summary", stdout.String())
 	}
+	if !strings.Contains(stdout.String(), "Source signatures") {
+		t.Fatalf("stdout = %q, want source signature verification summary", stdout.String())
+	}
 }
 
 func TestGitHubAuditCommandPrintsExitReadinessReport(t *testing.T) {
