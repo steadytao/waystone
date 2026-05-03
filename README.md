@@ -57,7 +57,7 @@ The current prototype includes:
 - operation records for ledger-changing and verification commands
 - object hashes and strict ledger verification
 - local Ed25519 signing for new operation records and source manifests
-- ledger archive export, inspection and import
+- ledger archive export, manifest signing, inspection and import
 - GoReleaser-based release structure with checksums, SBOMs and Sigstore bundles
 
 Published releases will appear here:
@@ -70,7 +70,7 @@ Waystone currently aims to be:
 - a portable record format for Git repository collaboration data
 - a migration aid for projects moving between forges
 - a preservation tool for project context around code
-- a foundation for future signed archive manifests and archives
+- signed provenance for operations, source manifests and archive manifests
 
 The narrow product thesis is:
 ```text
@@ -252,7 +252,7 @@ Without `GITHUB_TOKEN`, `waystone github auth login` uses the GitHub OAuth devic
 
 The default ledger export is a compressed archive intended for portable preservation and transfer.
 
-Safe import verifies the archive as a Waystone ledger before replacing local state. `--unsafe` exists only as an explicit escape hatch for controlled development or recovery work and should not be used for untrusted archives.
+Safe import verifies the archive manifest and the extracted Waystone ledger before replacing local state. `--unsafe` exists only as an explicit escape hatch for controlled development or recovery work and should not be used for untrusted archives.
 
 Importing Waystone data must never execute anything.
 
@@ -264,7 +264,7 @@ Operation records may include the authenticated GitHub login. Local OS username 
 
 Waystone does not claim that local hashes, operation chains or signatures prevent a user with filesystem access from editing the ledger. They provide detection for accidental edits, unsynchronised local mutation and invalid operation signatures.
 
-`waystone identity init` creates a local Ed25519 identity for operation and source manifest signing. Public identity metadata is stored in the ledger. Private signing material is local key material and is excluded from ledger exports.
+`waystone identity init` creates a local Ed25519 identity for operation, source manifest and archive manifest signing. Public identity metadata is stored in the ledger. Private signing material is local key material and is excluded from ledger exports.
 
 ## Documentation
 

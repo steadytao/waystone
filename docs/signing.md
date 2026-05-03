@@ -1,16 +1,17 @@
 # Signing
 
-Waystone can sign operation records and source manifests with a local Ed25519
-identity.
+Waystone can sign operation records, source manifests and archive manifests
+with a local Ed25519 identity.
 
-This is intentionally narrow. Exported archives are not signed yet.
+This is intentionally narrow. Signing proves what Waystone wrote locally. It
+does not prove that imported forge content was true.
 
 ## Goals
 
 - make tampering detectable without trusting file mtimes or local filesystem
   metadata
 - bind operation records to the actor and command that produced them
-- let exported ledgers carry verifiable provenance later
+- let exported ledgers carry verifiable archive manifests
 - keep unsigned local use possible during the prototype phase
 
 ## Non-goals
@@ -24,15 +25,15 @@ This is intentionally narrow. Exported archives are not signed yet.
 
 ## Signing Order
 
-Signing is being introduced in this order:
+Signing was introduced in this order:
 1. Operation records
 2. Source manifests
 3. Exported archives
 
 Operation records are first because they are the ledger's history of local
 actions. Source manifests come next because they bind source identity, object
-refs and operation refs. Exported archives can be signed after the inner ledger
-format is stable.
+refs and operation refs. Exported archives come last because they package the
+verified logical ledger.
 
 ## Operation Records
 
@@ -83,8 +84,21 @@ allow `ledger verify --strict` to detect manual edits to individual files.
 
 ## Archives
 
-Archive signatures need to cover the archive manifest, not the compressed bytes.
+Archive signatures cover the archive manifest, not the compressed bytes.
 Compression settings can't affect whether the logical ledger verifies.
+
+Archive manifests include:
+- archive format version
+- creation timestamp
+- exported file paths, sizes and SHA-256 hashes
+- included source manifests
+- ledger verification checksum
+- operation count
+- operation-chain head
+- optional Ed25519 signature
+
+When a default identity exists, `waystone ledger export` signs the archive
+manifest automatically.
 
 Import must never execute anything, even if an archive is signed by a trusted
 key.
