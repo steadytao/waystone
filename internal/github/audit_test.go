@@ -153,6 +153,66 @@ func TestAuditRepositoryReturnsOptionalContentErrors(t *testing.T) {
 	}
 }
 
+func TestAuditRepositoryDistinguishesInaccessibleSurfaces(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/repos/example/project":
+			writeJSON(t, w, ghRepository{
+				ID:            1,
+				FullName:      "example/project",
+				HTMLURL:       "https://github.com/example/project",
+				DefaultBranch: "main",
+				CreatedAt:     mustTime("2026-01-01T00:00:00Z"),
+				UpdatedAt:     mustTime("2026-01-02T00:00:00Z"),
+			})
+		case "/repos/example/project/contents/.github/workflows":
+			http.NotFound(w, r)
+		case "/repos/example/project/releases":
+			writeJSON(t, w, []ghRelease{})
+		case "/repos/example/project/branches/main/protection":
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"message":"requires admin access"}`))
+		case "/repos/example/project/actions/secrets":
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"message":"requires secrets access"}`))
+		case "/repos/example/project/actions/variables":
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"message":"requires variables access"}`))
+		case "/repos/example/project/environments":
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"message":"requires environments access"}`))
+		case "/repos/example/project/pages":
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"message":"requires pages access"}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	audit, err := NewClient(server.URL, "", time.Second).AuditRepository(context.Background(), "example", "project")
+	if err != nil {
+		t.Fatalf("AuditRepository returned error: %v", err)
+	}
+
+	if !audit.BranchProtection.Inaccessible || audit.BranchProtection.InaccessibleStatusCode != http.StatusForbidden {
+		t.Fatalf("branch protection = %#v, want inaccessible 403", audit.BranchProtection)
+	}
+	if !audit.Secrets.Inaccessible || audit.Secrets.InaccessibleStatusCode != http.StatusForbidden {
+		t.Fatalf("secrets = %#v, want inaccessible 403", audit.Secrets)
+	}
+	if !audit.Variables.Inaccessible || audit.Variables.InaccessibleStatusCode != http.StatusForbidden {
+		t.Fatalf("variables = %#v, want inaccessible 403", audit.Variables)
+	}
+	if !audit.Environments.Inaccessible || audit.Environments.InaccessibleStatusCode != http.StatusForbidden {
+		t.Fatalf("environments = %#v, want inaccessible 403", audit.Environments)
+	}
+	if !audit.Pages.Inaccessible || audit.Pages.InaccessibleStatusCode != http.StatusForbidden {
+		t.Fatalf("pages = %#v, want inaccessible 403", audit.Pages)
+	}
+}
+
 func containsAuditFinding(values []string, want string) bool {
 	for _, value := range values {
 		if value == want {

@@ -44,7 +44,7 @@ Audit inspects GitHub dependency surfaces that can make repository migration har
 
 Audit writes an audit object and operation record to `.waystone/` by default. Use `--no-write` for report-only output.
 
-Audit does not execute workflows or repository code. It does not collect secret or variable values. Use `--verbose` or `-v` to list every action reference; default human output summarises action kinds to avoid noisy reports on large repositories.
+Audit does not execute workflows or repository code. It does not collect secret or variable values. Optional surfaces distinguish absence from inaccessible evidence where GitHub returns permission failures. Use `--verbose` or `-v` to list every action reference; default human output summarises action kinds to avoid noisy reports on large repositories.
 
 Import fetches repository metadata, issues, pull requests, comments, labels, milestones, releases and review comments.
 
