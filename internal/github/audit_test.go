@@ -46,6 +46,22 @@ func TestAuditRepositoryFindsGitHubDependencySurfaces(t *testing.T) {
 			writeContent(t, w, `.github/PULL_REQUEST_TEMPLATE.md`, "## Summary\n")
 		case "/repos/example/project/contents/CODEOWNERS":
 			writeContent(t, w, `CODEOWNERS`, "* @example/maintainers\n")
+		case "/repos/example/project/branches/main/protection":
+			_, _ = w.Write([]byte(`{
+				"required_status_checks": {"contexts": ["test"], "checks": [{"context": "lint"}]},
+				"required_pull_request_reviews": {"required_approving_review_count": 2, "require_code_owner_reviews": true},
+				"enforce_admins": {"enabled": true}
+			}`))
+		case "/repos/example/project/actions/secrets":
+			_, _ = w.Write([]byte(`{"total_count":3,"secrets":[{"name":"TOKEN"}]}`))
+		case "/repos/example/project/actions/variables":
+			_, _ = w.Write([]byte(`{"total_count":2,"variables":[{"name":"REGION"}]}`))
+		case "/repos/example/project/environments":
+			_, _ = w.Write([]byte(`{"total_count":1,"environments":[{"name":"production"}]}`))
+		case "/repos/example/project/pages":
+			_, _ = w.Write([]byte(`{"html_url":"https://example.github.io/project/"}`))
+		case "/repos/example/project/releases":
+			_, _ = w.Write([]byte(`[{"id":1,"tag_name":"v1.0.0","assets":[{"id":10,"name":"waystone.zip"}]}]`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -80,6 +96,24 @@ func TestAuditRepositoryFindsGitHubDependencySurfaces(t *testing.T) {
 	}
 	if !audit.Codeowners.Present {
 		t.Fatal("CODEOWNERS was not detected")
+	}
+	if !audit.BranchProtection.Present || audit.BranchProtection.RequiredStatusChecks != 2 {
+		t.Fatalf("branch protection = %#v, want required checks", audit.BranchProtection)
+	}
+	if !audit.Secrets.Accessible || audit.Secrets.Count != 3 {
+		t.Fatalf("secrets = %#v, want accessible count", audit.Secrets)
+	}
+	if !audit.Variables.Accessible || audit.Variables.Count != 2 {
+		t.Fatalf("variables = %#v, want accessible count", audit.Variables)
+	}
+	if !audit.Environments.Accessible || audit.Environments.Count != 1 {
+		t.Fatalf("environments = %#v, want accessible count", audit.Environments)
+	}
+	if !audit.Pages.Present {
+		t.Fatal("GitHub Pages was not detected")
+	}
+	if audit.ReleaseAssets.Releases != 1 || audit.ReleaseAssets.Assets != 1 {
+		t.Fatalf("release assets = %#v, want one release asset", audit.ReleaseAssets)
 	}
 	if !containsAuditFinding(audit.NeedsMigrationPlan, "GitHub Actions workflows") {
 		t.Fatalf("needs migration plan = %#v, want workflows", audit.NeedsMigrationPlan)

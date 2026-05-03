@@ -74,6 +74,40 @@ func TestImportArchiveRejectsUnsafePaths(t *testing.T) {
 	}
 }
 
+func TestExportSourceArchiveIncludesAuditObjects(t *testing.T) {
+	root := writeTestLedger(t)
+	audit := model.GitHubAudit{
+		ID:          "github-audit-20260101t000000.000000000z",
+		Source:      model.Source{System: "github", Owner: "example", Repo: "project", URL: "https://github.com/example/project"},
+		GeneratedAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		Repository:  model.GitHubAuditRepository{FullName: "example/project", URL: "https://github.com/example/project", DefaultBranch: "main"},
+		Portable:    []string{"issues"},
+	}
+	if source, err := (Reader{Root: root}).Source(audit.Source); err == nil {
+		audit.Source.Objects = source.Objects
+		audit.Source.Operations = source.Operations
+	}
+	if err := (Writer{Root: root}).WriteGitHubAudit(audit); err != nil {
+		t.Fatalf("WriteGitHubAudit returned error: %v", err)
+	}
+
+	archive := filepath.Join(t.TempDir(), "source-ledger")
+	if err := ExportSourceArchive(root, "github:example/project", archive); err != nil {
+		t.Fatalf("ExportSourceArchive returned error: %v", err)
+	}
+	imported := filepath.Join(t.TempDir(), ".waystone")
+	if err := ImportArchive(archive, imported); err != nil {
+		t.Fatalf("ImportArchive returned error: %v", err)
+	}
+	audits, err := (Reader{Root: imported}).Audits()
+	if err != nil {
+		t.Fatalf("Audits returned error: %v", err)
+	}
+	if len(audits) != 1 || audits[0].ID != audit.ID {
+		t.Fatalf("audits = %#v, want source audit object", audits)
+	}
+}
+
 func TestSafeRootedPathRejectsTraversal(t *testing.T) {
 	root := t.TempDir()
 	tests := []string{

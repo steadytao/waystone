@@ -1195,6 +1195,8 @@ func githubAuditTestServer(t *testing.T) string {
 			fmt.Fprint(w, `[{"name":"ci.yml","path":".github/workflows/ci.yml","type":"file"}]`)
 		case "/repos/example/project/contents/.github/workflows/ci.yml":
 			writeCLIContent(t, w, ".github/workflows/ci.yml", "name: CI\njobs:\n  test:\n    steps:\n      - uses: actions/checkout@v4\n")
+		case "/repos/example/project/releases":
+			fmt.Fprint(w, `[]`)
 		default:
 			http.NotFound(w, r)
 		}

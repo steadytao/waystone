@@ -6,6 +6,7 @@ package github
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"net/url"
 	"regexp"
 	"sort"
@@ -94,10 +95,52 @@ func (c *Client) AuditRepository(ctx context.Context, owner, repo string) (model
 	if audit.Codeowners.Present {
 		audit.NeedsMigrationPlan = append(audit.NeedsMigrationPlan, "CODEOWNERS")
 	}
+	audit.BranchProtection, err = c.auditBranchProtection(ctx, owner, repo, repository.DefaultBranch)
+	if err != nil {
+		return model.GitHubAudit{}, err
+	}
+	if audit.BranchProtection.Present {
+		audit.NeedsMigrationPlan = append(audit.NeedsMigrationPlan, "branch protection")
+	}
+	audit.Secrets, err = c.auditCount(ctx, fmt.Sprintf("/repos/%s/%s/actions/secrets", owner, repo))
+	if err != nil {
+		return model.GitHubAudit{}, err
+	}
+	if audit.Secrets.Accessible && audit.Secrets.Count > 0 {
+		audit.NeedsMigrationPlan = append(audit.NeedsMigrationPlan, "repository secrets")
+	}
+	audit.Variables, err = c.auditCount(ctx, fmt.Sprintf("/repos/%s/%s/actions/variables", owner, repo))
+	if err != nil {
+		return model.GitHubAudit{}, err
+	}
+	if audit.Variables.Accessible && audit.Variables.Count > 0 {
+		audit.NeedsMigrationPlan = append(audit.NeedsMigrationPlan, "repository variables")
+	}
+	audit.Environments, err = c.auditCount(ctx, fmt.Sprintf("/repos/%s/%s/environments", owner, repo))
+	if err != nil {
+		return model.GitHubAudit{}, err
+	}
+	if audit.Environments.Accessible && audit.Environments.Count > 0 {
+		audit.NeedsMigrationPlan = append(audit.NeedsMigrationPlan, "environments")
+	}
+	audit.Pages, err = c.auditPages(ctx, owner, repo)
+	if err != nil {
+		return model.GitHubAudit{}, err
+	}
+	if audit.Pages.Present {
+		audit.NeedsMigrationPlan = append(audit.NeedsMigrationPlan, "GitHub Pages")
+	}
+	audit.ReleaseAssets, err = c.auditReleaseAssets(ctx, owner, repo)
+	if err != nil {
+		return model.GitHubAudit{}, err
+	}
+	if audit.ReleaseAssets.Assets > 0 {
+		audit.NeedsMigrationPlan = append(audit.NeedsMigrationPlan, "release assets")
+	}
 	audit.Limitations = append(audit.Limitations,
 		"does not inspect secret values",
 		"does not execute workflows or repository code",
-		"does not yet inspect branch protection, environments, webhooks, packages or release assets",
+		"does not yet inspect webhooks or packages",
 	)
 	return audit, nil
 }
@@ -186,6 +229,76 @@ func (c *Client) auditDirectoryPresence(ctx context.Context, owner, repo, ref, d
 		}
 	}
 	return model.GitHubAuditPresence{Present: len(paths) > 0, Paths: paths}, nil
+}
+
+func (c *Client) auditBranchProtection(ctx context.Context, owner, repo, branch string) (model.GitHubBranchProtection, error) {
+	if branch == "" {
+		return model.GitHubBranchProtection{}, nil
+	}
+	var protection ghBranchProtection
+	ok, status, err := c.getMaybe(ctx, fmt.Sprintf("/repos/%s/%s/branches/%s/protection", owner, repo, branch), nil, &protection)
+	if err != nil {
+		return model.GitHubBranchProtection{}, err
+	}
+	if !ok {
+		if status == 0 || status == http.StatusNotFound {
+			return model.GitHubBranchProtection{}, nil
+		}
+		return model.GitHubBranchProtection{Inaccessible: true, InaccessibleStatusCode: status}, nil
+	}
+	audit := model.GitHubBranchProtection{Present: true}
+	if protection.RequiredStatusChecks != nil {
+		audit.RequiredStatusChecks = len(protection.RequiredStatusChecks.Contexts) + len(protection.RequiredStatusChecks.Checks)
+	}
+	if protection.RequiredPullRequestReviews != nil {
+		audit.RequiredReviews = true
+		audit.RequiredApprovals = protection.RequiredPullRequestReviews.RequiredApprovingReviewCount
+		audit.CodeOwnerReviews = protection.RequiredPullRequestReviews.RequireCodeOwnerReviews
+	}
+	if protection.EnforceAdmins != nil {
+		audit.AdminEnforcement = protection.EnforceAdmins.Enabled
+	}
+	return audit, nil
+}
+
+func (c *Client) auditCount(ctx context.Context, path string) (model.GitHubAuditCount, error) {
+	var count ghCountEnvelope
+	ok, _, err := c.getMaybe(ctx, path, nil, &count)
+	if err != nil {
+		return model.GitHubAuditCount{}, err
+	}
+	if !ok {
+		return model.GitHubAuditCount{}, nil
+	}
+	return model.GitHubAuditCount{Accessible: true, Count: count.TotalCount}, nil
+}
+
+func (c *Client) auditPages(ctx context.Context, owner, repo string) (model.GitHubAuditPresence, error) {
+	var pages ghPages
+	ok, _, err := c.getMaybe(ctx, fmt.Sprintf("/repos/%s/%s/pages", owner, repo), nil, &pages)
+	if err != nil {
+		return model.GitHubAuditPresence{}, err
+	}
+	if !ok {
+		return model.GitHubAuditPresence{}, nil
+	}
+	return model.GitHubAuditPresence{Present: true, Paths: []string{pages.HTMLURL}}, nil
+}
+
+func (c *Client) auditReleaseAssets(ctx context.Context, owner, repo string) (model.GitHubReleaseAssets, error) {
+	var releases int
+	var assets int
+	err := paginate[ghRelease](ctx, c, fmt.Sprintf("/repos/%s/%s/releases", owner, repo), nil, func(items []ghRelease) error {
+		releases += len(items)
+		for _, release := range items {
+			assets += len(release.Assets)
+		}
+		return nil
+	})
+	if err != nil {
+		return model.GitHubReleaseAssets{}, err
+	}
+	return model.GitHubReleaseAssets{Releases: releases, Assets: assets}, nil
 }
 
 func parseActionUses(workflow, content string) []model.GitHubActionUse {
