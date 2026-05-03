@@ -335,6 +335,37 @@ func (r Reader) SourceMilestones(source model.Source) ([]model.Milestone, error)
 	return milestones, nil
 }
 
+func (r Reader) Audits() ([]model.GitHubAudit, error) {
+	audits, err := readObjectTreeJSON[model.GitHubAudit](r.Root, "audits")
+	if err != nil {
+		return nil, err
+	}
+	sortAudits(audits)
+	return audits, nil
+}
+
+func (r Reader) SourceAudits(source model.Source) ([]model.GitHubAudit, error) {
+	audits, err := readDirJSON[model.GitHubAudit](filepath.Join(r.Root, sourceScopedPath(source), "audits"))
+	if err != nil {
+		return nil, err
+	}
+	sortAudits(audits)
+	return audits, nil
+}
+
+func (r Reader) Audit(id string) (model.GitHubAudit, error) {
+	audits, err := r.Audits()
+	if err != nil {
+		return model.GitHubAudit{}, err
+	}
+	for _, audit := range audits {
+		if audit.ID == id || strings.TrimSuffix(namedFile(audit.ID), ".json") == id {
+			return audit, nil
+		}
+	}
+	return model.GitHubAudit{}, fmt.Errorf("audit %q not found", id)
+}
+
 func readDirJSON[T any](dir string) ([]T, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -445,6 +476,15 @@ func sortReviewComments(comments []model.ReviewComment) []model.ReviewComment {
 		return comments[i].CreatedAt.Before(comments[j].CreatedAt)
 	})
 	return comments
+}
+
+func sortAudits(audits []model.GitHubAudit) {
+	sort.Slice(audits, func(i, j int) bool {
+		if audits[i].GeneratedAt.Equal(audits[j].GeneratedAt) {
+			return audits[i].ID < audits[j].ID
+		}
+		return audits[i].GeneratedAt.Before(audits[j].GeneratedAt)
+	})
 }
 
 func lessSource(a, b model.Source) bool {

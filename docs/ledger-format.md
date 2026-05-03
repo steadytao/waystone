@@ -27,6 +27,7 @@ The format is plain JSON plus content hashes. It is designed to be inspectable, 
           labels/
           milestones/
           releases/
+          audits/
   operations/
     <operation-id>-<hash>.json
 ```
@@ -42,6 +43,8 @@ The format is plain JSON plus content hashes. It is designed to be inspectable, 
 `objects/` stores imported records grouped by source.
 
 `operations/` stores local command history.
+
+`audits/` stores GitHub exit-readiness audit records. Audit objects are source-scoped ledger evidence, not remote forge content.
 
 ## Source Namespaces
 
@@ -65,7 +68,9 @@ Each source manifest records:
 
 Object references include object type, number or ID, relative path and SHA-256 of the canonical object JSON. Strict verification uses those hashes to detect missing or manually changed object files.
 
-Operation references identify import and refresh operations associated with the source. They support `source status`, `source inspect`, `ledger doctor` and source-targeted export.
+Audit records are indexed as `audit` object references under the same source manifest as imported collaboration records.
+
+Operation references identify import, refresh and audit operations associated with the source. They support `source status`, `source inspect`, `ledger doctor` and source-targeted export.
 
 ## Operation Records
 

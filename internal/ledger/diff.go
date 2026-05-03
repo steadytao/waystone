@@ -57,6 +57,39 @@ func (w Writer) DiffGitHubImport(imported model.GitHubImport) (Diff, error) {
 	return diff, nil
 }
 
+func (w Writer) DiffGitHubAudit(audit model.GitHubAudit) (Diff, error) {
+	var diff Diff
+	for _, target := range gitHubAuditTargets(audit) {
+		changeType, err := w.diffTarget(target)
+		if err != nil {
+			return Diff{}, err
+		}
+		switch changeType {
+		case "created":
+			diff.Created++
+		case "updated":
+			diff.Updated++
+		case "unchanged":
+			diff.Unchanged++
+		}
+		if changeType == "unchanged" {
+			changeType = "verified"
+		}
+		objectHash, err := w.targetHash(target)
+		if err != nil {
+			return Diff{}, err
+		}
+		diff.Changes = append(diff.Changes, model.ObjectChange{
+			Type:   changeType,
+			Object: target.object,
+			ID:     target.id,
+			Path:   filepath.ToSlash(target.relative),
+			SHA256: objectHash,
+		})
+	}
+	return diff, nil
+}
+
 func (w Writer) targetHash(target writeTarget) (string, error) {
 	next, err := canonicalJSON(target.value)
 	if err != nil {

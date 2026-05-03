@@ -78,7 +78,7 @@ func TestGitHubAuditCommandPrintsExitReadinessReport(t *testing.T) {
 	apiBase := githubAuditTestServer(t)
 	var stdout, stderr bytes.Buffer
 
-	err := Run(context.Background(), []string{"github", "audit", "--api-base", apiBase, "example/project"}, &stdout, &stderr)
+	err := Run(context.Background(), []string{"github", "audit", "--api-base", apiBase, "--no-write", "example/project"}, &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("Run returned error: %v stderr=%q", err, stderr.String())
 	}
@@ -109,7 +109,7 @@ func TestGitHubAuditCommandVerbosePrintsActionEvidence(t *testing.T) {
 	apiBase := githubAuditTestServer(t)
 	var stdout, stderr bytes.Buffer
 
-	err := Run(context.Background(), []string{"github", "audit", "--api-base", apiBase, "--verbose", "example/project"}, &stdout, &stderr)
+	err := Run(context.Background(), []string{"github", "audit", "--api-base", apiBase, "--verbose", "--no-write", "example/project"}, &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("Run returned error: %v stderr=%q", err, stderr.String())
 	}
@@ -123,7 +123,7 @@ func TestGitHubAuditCommandWritesJSON(t *testing.T) {
 	apiBase := githubAuditTestServer(t)
 	var stdout, stderr bytes.Buffer
 
-	err := Run(context.Background(), []string{"github", "audit", "--api-base", apiBase, "--json", "example/project"}, &stdout, &stderr)
+	err := Run(context.Background(), []string{"github", "audit", "--api-base", apiBase, "--json", "--no-write", "example/project"}, &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("Run returned error: %v stderr=%q", err, stderr.String())
 	}
@@ -143,6 +143,102 @@ func TestGitHubAuditCommandWritesJSON(t *testing.T) {
 	}
 	if len(payload.Workflows) != 1 {
 		t.Fatalf("workflows = %d, want 1", len(payload.Workflows))
+	}
+}
+
+func TestGitHubAuditCommandWritesLedgerRecord(t *testing.T) {
+	apiBase := githubAuditTestServer(t)
+	root := t.TempDir()
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"github", "audit", "--api-base", apiBase, "--ledger", root, "example/project"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error: %v stderr=%q", err, stderr.String())
+	}
+
+	if !strings.Contains(stdout.String(), "Operation") {
+		t.Fatalf("stdout = %q, want operation summary", stdout.String())
+	}
+	audits, err := (ledger.Reader{Root: root}).Audits()
+	if err != nil {
+		t.Fatalf("Audits returned error: %v", err)
+	}
+	if len(audits) != 1 {
+		t.Fatalf("audits = %d, want 1", len(audits))
+	}
+	operations, err := (ledger.Reader{Root: root}).Operations()
+	if err != nil {
+		t.Fatalf("Operations returned error: %v", err)
+	}
+	if len(operations) != 1 || operations[0].Command != "github audit" {
+		t.Fatalf("operations = %#v, want github audit operation", operations)
+	}
+	if !operationHasObjectChange(operations[0], "source") {
+		t.Fatalf("operation changes = %#v, want source manifest change", operations[0].Changes)
+	}
+	source, err := (ledger.Reader{Root: root}).Source(model.Source{System: "github", Owner: "example", Repo: "project"})
+	if err != nil {
+		t.Fatalf("Source returned error: %v", err)
+	}
+	if len(source.Objects) != 1 || source.Objects[0].Object != "audit" {
+		t.Fatalf("source objects = %#v, want audit ref", source.Objects)
+	}
+}
+
+func operationHasObjectChange(operation model.Operation, object string) bool {
+	for _, change := range operation.Changes {
+		if change.Object == object {
+			return true
+		}
+	}
+	return false
+}
+
+func TestGitHubAuditCommandNoWriteLeavesLedgerEmpty(t *testing.T) {
+	apiBase := githubAuditTestServer(t)
+	root := t.TempDir()
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"github", "audit", "--api-base", apiBase, "--ledger", root, "--no-write", "example/project"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error: %v stderr=%q", err, stderr.String())
+	}
+
+	if _, err := os.Stat(filepath.Join(root, "ledger.json")); !os.IsNotExist(err) {
+		t.Fatalf("ledger.json stat error = %v, want not exist", err)
+	}
+}
+
+func TestAuditListAndShowCommands(t *testing.T) {
+	root := writeTestLedger(t)
+	audit := model.GitHubAudit{
+		ID:          "github-audit-20260101t000000.000000000z",
+		Source:      model.Source{System: "github", Owner: "example", Repo: "project", URL: "https://github.com/example/project"},
+		GeneratedAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		Repository:  model.GitHubAuditRepository{FullName: "example/project", URL: "https://github.com/example/project", DefaultBranch: "main"},
+		Portable:    []string{"issues"},
+		Workflows:   []model.GitHubWorkflow{{Name: "ci.yml", Path: ".github/workflows/ci.yml", Actions: 1}},
+		Actions:     []model.GitHubActionUse{{Workflow: ".github/workflows/ci.yml", Value: "actions/checkout@v4", Kind: "remote"}},
+	}
+	if err := (ledger.Writer{Root: root}).WriteGitHubAudit(audit); err != nil {
+		t.Fatalf("WriteGitHubAudit returned error: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	if err := Run(context.Background(), []string{"audit", "list", "--ledger", root}, &stdout, &stderr); err != nil {
+		t.Fatalf("audit list returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "example/project") || !strings.Contains(stdout.String(), audit.ID) {
+		t.Fatalf("stdout = %q, want audit row", stdout.String())
+	}
+	stdout.Reset()
+	if err := Run(context.Background(), []string{"audit", "show", "--ledger", root, audit.ID}, &stdout, &stderr); err != nil {
+		t.Fatalf("audit show returned error: %v", err)
+	}
+	for _, want := range []string{"Repository", "example/project", "Actions", "remote 1"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+		}
 	}
 }
 
@@ -1091,6 +1187,8 @@ func githubAuditTestServer(t *testing.T) string {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
+		case "/user":
+			fmt.Fprint(w, `{"login":"tester"}`)
 		case "/repos/example/project":
 			fmt.Fprint(w, `{"id":1,"full_name":"example/project","description":"test project","html_url":"https://github.com/example/project","default_branch":"main","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-02T00:00:00Z"}`)
 		case "/repos/example/project/contents/.github/workflows":

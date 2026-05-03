@@ -39,6 +39,8 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	}
 
 	switch args[0] {
+	case "audit":
+		return runAudit(args[1:], stdout, stderr)
 	case "github":
 		return runGitHub(ctx, args[1:], stdout, stderr)
 	case "issue":
@@ -62,6 +64,99 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		printUsage(stderr)
 		return fmt.Errorf("unknown command %q", args[0])
 	}
+}
+
+func runAudit(args []string, stdout, stderr io.Writer) error {
+	if len(args) == 0 {
+		printAuditUsage(stderr)
+		return errors.New("missing audit command")
+	}
+	switch args[0] {
+	case "list":
+		return runAuditList(args[1:], stdout)
+	case "show":
+		return runAuditShow(args[1:], stdout)
+	default:
+		printAuditUsage(stderr)
+		return fmt.Errorf("unknown audit command %q", args[0])
+	}
+}
+
+func runAuditList(args []string, stdout io.Writer) error {
+	fs := flag.NewFlagSet("waystone audit list", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	root := fs.String("ledger", ".waystone", "Waystone ledger directory")
+	sourceFlag := fs.String("source", "", "source to inspect, e.g. github:owner/repo")
+	jsonOutput := fs.Bool("json", false, "write JSON output")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return errors.New("usage: waystone audit list [flags]")
+	}
+	reader := ledger.Reader{Root: *root}
+	var audits []model.GitHubAudit
+	var err error
+	if *sourceFlag != "" {
+		source, err := ledger.ParseSourceSpec(*sourceFlag)
+		if err != nil {
+			return err
+		}
+		audits, err = reader.SourceAudits(source)
+	} else {
+		audits, err = reader.Audits()
+	}
+	if err != nil {
+		return err
+	}
+	if *jsonOutput {
+		return writeJSONOutput(stdout, audits)
+	}
+	writeField(stdout, "Audits", len(audits))
+	if len(audits) == 0 {
+		return nil
+	}
+	fmt.Fprintln(stdout)
+	fmt.Fprintf(stdout, "%-32s %-24s %-14s %s\n", "ID", "SOURCE", "GENERATED", "WORKFLOWS")
+	for _, audit := range audits {
+		fmt.Fprintf(stdout, "%-32s %-24s %-14s %d\n", audit.ID, ledger.SourceSpec(audit.Source), audit.GeneratedAt.Format("2006-01-02"), len(audit.Workflows))
+	}
+	return nil
+}
+
+func runAuditShow(args []string, stdout io.Writer) error {
+	fs := flag.NewFlagSet("waystone audit show", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	root := fs.String("ledger", ".waystone", "Waystone ledger directory")
+	jsonOutput := fs.Bool("json", false, "write JSON output")
+	verbose := fs.Bool("verbose", false, "show detailed audit evidence")
+	verboseShort := fs.Bool("v", false, "show detailed audit evidence")
+	normalizedArgs, err := normalizeSingleValueCommandArgs(args, "audit", map[string]bool{
+		"--json":    true,
+		"-json":     true,
+		"--verbose": true,
+		"-verbose":  true,
+		"--v":       true,
+		"-v":        true,
+	})
+	if err != nil {
+		return err
+	}
+	if err := fs.Parse(normalizedArgs); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		return errors.New("usage: waystone audit show [flags] <audit>")
+	}
+	audit, err := (ledger.Reader{Root: *root}).Audit(fs.Arg(0))
+	if err != nil {
+		return err
+	}
+	if *jsonOutput {
+		return writeJSONOutput(stdout, audit)
+	}
+	writeGitHubAudit(stdout, audit, *verbose || *verboseShort)
+	return nil
 }
 
 func runVersion(args []string, stdout io.Writer) error {
@@ -1682,10 +1777,13 @@ func runGitHubAudit(ctx context.Context, args []string, stdout io.Writer) error 
 	tokenEnv := fs.String("token-env", "GITHUB_TOKEN", "environment variable containing a GitHub token")
 	apiBase := fs.String("api-base", "https://api.github.com", "GitHub API base URL")
 	timeout := fs.Duration("timeout", 2*time.Minute, "request timeout")
+	root := fs.String("ledger", ".waystone", "Waystone ledger directory")
 	plainFileStore := fs.Bool("plain-file-store", false, "read stored token from a plaintext local file instead of the OS credential store")
 	jsonOutput := fs.Bool("json", false, "write JSON output")
 	verbose := fs.Bool("verbose", false, "show detailed audit evidence")
 	verboseShort := fs.Bool("v", false, "show detailed audit evidence")
+	noWrite := fs.Bool("no-write", false, "print the audit without writing it to the ledger")
+	includeLocal := fs.Bool("local", false, "include local OS user and hostname in operation records")
 
 	normalizedArgs, err := normalizeSingleValueCommandArgs(args, "repository", map[string]bool{
 		"--json":             true,
@@ -1696,6 +1794,10 @@ func runGitHubAudit(ctx context.Context, args []string, stdout io.Writer) error 
 		"-v":                 true,
 		"--plain-file-store": true,
 		"-plain-file-store":  true,
+		"--no-write":         true,
+		"-no-write":          true,
+		"--local":            true,
+		"-local":             true,
 	})
 	if err != nil {
 		return err
@@ -1711,23 +1813,85 @@ func runGitHubAudit(ctx context.Context, args []string, stdout io.Writer) error 
 		return err
 	}
 	token := githubTokenFromEnvironment(*tokenEnv)
+	authMode := "none"
 	if token == "" {
 		store, err := credentialStore(*plainFileStore)
 		if err == nil {
 			stored, err := store.GitHubToken()
 			if err == nil {
 				token = stored.AccessToken
+				authMode = "stored"
 			}
 		}
+	} else {
+		authMode = "environment"
 	}
-	audit, err := github.NewClient(*apiBase, token, *timeout).AuditRepository(ctx, owner, repo)
+	startedAt := time.Now().UTC()
+	operationID := ledger.NewOperationID("github audit", startedAt)
+	client := github.NewClient(*apiBase, token, *timeout)
+	authLogin := ""
+	if token != "" {
+		login, err := client.AuthenticatedUser(ctx)
+		if err != nil {
+			return err
+		}
+		authLogin = login
+	}
+	audit, err := client.AuditRepository(ctx, owner, repo)
 	if err != nil {
 		return err
+	}
+	audit.ID = operationID
+	if !*noWrite {
+		writer := ledger.Writer{Root: *root}
+		recordedAudit := audit
+		if existingSource, err := (ledger.Reader{Root: *root}).Source(audit.Source); err == nil {
+			recordedAudit.Source.Objects = existingSource.Objects
+			recordedAudit.Source.Operations = existingSource.Operations
+		}
+		recordedAudit.Source.Operations = append(recordedAudit.Source.Operations, model.SourceOperationRef{
+			ID:        operationID,
+			Command:   "github audit",
+			Path:      ledger.OperationPath(operationID),
+			StartedAt: startedAt,
+		})
+		diff, err := writer.DiffGitHubAudit(recordedAudit)
+		if err != nil {
+			return err
+		}
+		ledgerExisted := fileExists(filepath.Join(*root, "ledger.json"))
+		if err := writer.WriteGitHubAudit(recordedAudit); err != nil {
+			return err
+		}
+		if err := addLedgerMetadataChange(&diff, *root, ledgerExisted); err != nil {
+			return err
+		}
+		finishedAt := time.Now().UTC()
+		operation := model.Operation{
+			ID:         operationID,
+			Command:    "github audit",
+			Args:       append([]string(nil), args...),
+			StartedAt:  startedAt,
+			FinishedAt: finishedAt,
+			Actor:      ledger.LocalActor(gitConfig("user.name"), gitConfig("user.email"), *includeLocal),
+			Auth:       model.OperationAuth{Provider: "github", Mode: authMode, Login: authLogin},
+			Input:      map[string]string{"source": owner + "/" + repo},
+			Output:     model.OperationOutput{Ledger: *root, Created: diff.Created, Updated: diff.Updated, Unchanged: diff.Unchanged},
+			Changes:    diff.Changes,
+		}
+		if err := writer.WriteOperation(operation); err != nil {
+			return err
+		}
 	}
 	if *jsonOutput {
 		return writeJSONOutput(stdout, audit)
 	}
 	writeGitHubAudit(stdout, audit, *verbose || *verboseShort)
+	if !*noWrite {
+		fmt.Fprintln(stdout)
+		writeField(stdout, "Operation", operationID)
+		writeField(stdout, "Ledger", *root)
+	}
 	return nil
 }
 
@@ -2939,6 +3103,8 @@ func normalizeSingleValueCommandArgs(args []string, valueName string, boolFlags 
 
 func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage:")
+	fmt.Fprintln(w, "  waystone audit list [flags]")
+	fmt.Fprintln(w, "  waystone audit show [flags] <audit>")
 	fmt.Fprintln(w, "  waystone github auth login [flags]")
 	fmt.Fprintln(w, "  waystone github auth logout [flags]")
 	fmt.Fprintln(w, "  waystone github audit [flags] owner/repo")
@@ -2973,6 +3139,12 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  waystone source show [flags] <source>")
 	fmt.Fprintln(w, "  waystone source status [flags]")
 	fmt.Fprintln(w, "  waystone version [flags]")
+}
+
+func printAuditUsage(w io.Writer) {
+	fmt.Fprintln(w, "Usage:")
+	fmt.Fprintln(w, "  waystone audit list [flags]")
+	fmt.Fprintln(w, "  waystone audit show [flags] <audit>")
 }
 
 func printGitHubUsage(w io.Writer) {

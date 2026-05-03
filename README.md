@@ -152,6 +152,9 @@ waystone github audit owner/repo
 waystone github import owner/repo
 waystone github refresh owner/repo
 
+waystone audit list
+waystone audit show <audit-id>
+
 waystone source list
 waystone source default [source]
 waystone source show <source>
@@ -204,6 +207,7 @@ The current layout is:
 
 The ledger is intended to preserve:
 - what source was imported
+- what source was audited
 - what records were written, updated or verified
 - when commands ran
 - which authenticated GitHub account was used where relevant
