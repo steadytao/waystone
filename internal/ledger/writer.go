@@ -246,7 +246,6 @@ func (w Writer) sourceSignature(source model.Source) (*model.OperationSignature,
 }
 
 func sourceSigningBytes(source model.Source) ([]byte, error) {
-	source.Signature = nil
 	value := struct {
 		System     string                     `json:"system"`
 		Owner      string                     `json:"owner"`
