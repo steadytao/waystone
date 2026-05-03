@@ -57,9 +57,18 @@ To create a local signing identity:
 ```sh
 waystone identity init
 waystone identity show
+waystone identity list
+waystone identity status
 ```
 
 When a default identity exists, new operation records are signed automatically.
+`identity init` also trusts the new identity in the local ledger trust policy.
+
+To change local trust policy:
+```sh
+waystone identity trust <identity-id>
+waystone identity untrust <identity-id>
+```
 
 To verify signatures:
 ```sh
@@ -67,7 +76,8 @@ waystone ledger verify --strict --signatures
 ```
 
 Unsigned operation records and source manifests are reported, not rejected.
-Invalid signatures are integrity failures.
+Valid signatures are reported as trusted or untrusted according to local trust
+policy. Invalid signatures are integrity failures.
 
 Operation signing proves that the operation record was produced by the local
 private key corresponding to the recorded public identity. It does not prove
@@ -125,6 +135,10 @@ Strict verification eventually needs to distinguish:
 
 Invalid signatures and hash mismatches are integrity failures. Unknown keys are
 trust-policy findings.
+
+The first trust implementation is local and explicit. It trusts identities by
+Waystone identity ID in `trust.json`. It does not bind keys to GitHub accounts,
+SSH keys, PGP identities or any external identity provider.
 
 ## Privacy
 

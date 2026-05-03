@@ -34,6 +34,7 @@ Current records:
 - [`0010-local-operation-signing.md`](0010-local-operation-signing.md)
 - [`0011-source-manifest-signing.md`](0011-source-manifest-signing.md)
 - [`0012-archive-manifest-signing.md`](0012-archive-manifest-signing.md)
+- [`0013-local-identity-trust-policy.md`](0013-local-identity-trust-policy.md)
 
 ## Notes
 

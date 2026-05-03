@@ -40,6 +40,8 @@ Source manifest signatures prove that a source manifest indexed a specific set o
 
 Archive manifest signatures prove that an exported archive manifest was produced by the private key corresponding to the recorded public identity. They cover the logical archive manifest, not the compressed bytes.
 
+Valid signatures are reported as trusted or untrusted according to local trust policy. Trust policy is ledger-local and uses Waystone identity IDs.
+
 Unsigned records are reported because early ledgers may predate signing. Invalid signatures fail verification.
 
 ## Reporting Security Issues

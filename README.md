@@ -57,6 +57,7 @@ The current prototype includes:
 - operation records for ledger-changing and verification commands
 - object hashes and strict ledger verification
 - local Ed25519 signing for new operation records and source manifests
+- local trust policy for Waystone signing identities
 - ledger archive export, manifest signing, inspection and import
 - GoReleaser-based release structure with checksums, SBOMs and Sigstore bundles
 
@@ -160,7 +161,11 @@ waystone github import owner/repo
 waystone github refresh owner/repo
 
 waystone identity init
+waystone identity list
 waystone identity show
+waystone identity status
+waystone identity trust <identity-id>
+waystone identity untrust <identity-id>
 
 waystone audit list
 waystone audit show <audit-id>
@@ -264,7 +269,7 @@ Operation records may include the authenticated GitHub login. Local OS username 
 
 Waystone does not claim that local hashes, operation chains or signatures prevent a user with filesystem access from editing the ledger. They provide detection for accidental edits, unsynchronised local mutation and invalid operation signatures.
 
-`waystone identity init` creates a local Ed25519 identity for operation, source manifest and archive manifest signing. Public identity metadata is stored in the ledger. Private signing material is local key material and is excluded from ledger exports.
+`waystone identity init` creates and locally trusts an Ed25519 identity for operation, source manifest and archive manifest signing. Public identity metadata and trust policy are stored in the ledger. Private signing material is local key material and is excluded from ledger exports.
 
 ## Documentation
 

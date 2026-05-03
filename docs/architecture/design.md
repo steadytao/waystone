@@ -99,7 +99,7 @@ waystone ledger import
 Later local authoring may add:
 ```sh
 waystone init
-waystone identity create
+waystone identity init
 waystone issue create
 waystone issue comment
 waystone issue close
