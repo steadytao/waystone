@@ -79,6 +79,14 @@ func (w Writer) operationSignature(operation model.Operation) (*model.OperationS
 	if err != nil {
 		return nil, err
 	}
+	signature, err := w.signPayload(identity, privateKey, data)
+	if err != nil {
+		return nil, err
+	}
+	return signature, nil
+}
+
+func (w Writer) signPayload(identity model.Identity, privateKey ed25519.PrivateKey, data []byte) (*model.OperationSignature, error) {
 	return &model.OperationSignature{
 		Algorithm:  identity.Algorithm,
 		IdentityID: identity.ID,

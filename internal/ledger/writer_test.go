@@ -211,6 +211,44 @@ func TestWriteOperationSignsWhenDefaultIdentityExists(t *testing.T) {
 	}
 }
 
+func TestWriteGitHubImportSignsSourceManifestWhenDefaultIdentityExists(t *testing.T) {
+	root := t.TempDir()
+	identity, err := CreateDefaultIdentity(root, "test")
+	if err != nil {
+		t.Fatalf("CreateDefaultIdentity returned error: %v", err)
+	}
+	imported := model.GitHubImport{
+		Project: model.Project{ID: "github:repo:1", Name: "example/project"},
+		Source:  model.Source{System: "github", Owner: "example", Repo: "project", URL: "https://github.com/example/project"},
+		Issues:  []model.Issue{{ID: "github:issue:1", Number: 1, Title: "issue"}},
+	}
+
+	if err := (Writer{Root: root}).WriteGitHubImport(imported); err != nil {
+		t.Fatalf("WriteGitHubImport returned error: %v", err)
+	}
+	source, err := (Reader{Root: root}).Source(imported.Source)
+	if err != nil {
+		t.Fatalf("Source returned error: %v", err)
+	}
+	if source.Signature == nil || source.Signature.IdentityID != identity.ID {
+		t.Fatalf("source signature = %#v, want signed source manifest", source.Signature)
+	}
+	verification, err := (Reader{Root: root}).VerifySourceSignatures()
+	if err != nil {
+		t.Fatalf("VerifySourceSignatures returned error: %v", err)
+	}
+	if verification.Valid != 1 || verification.Unsigned != 0 {
+		t.Fatalf("verification = %#v, want one valid source signature", verification)
+	}
+	source.Objects = nil
+	if err := writeJSON(filepath.Join(root, sourceManifestPath(imported.Source)), source); err != nil {
+		t.Fatalf("writeJSON returned error: %v", err)
+	}
+	if _, err := (Reader{Root: root}).VerifySourceSignatures(); err == nil {
+		t.Fatal("VerifySourceSignatures returned nil error for tampered source manifest")
+	}
+}
+
 func TestSourcePathIsSystemScoped(t *testing.T) {
 	source := model.Source{System: "waystone", Owner: "example", Repo: "project"}
 	if got := SourcePath(source); got != "imports/waystone/example-project-759b2c42ed72.json" {

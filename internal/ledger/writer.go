@@ -27,6 +27,7 @@ type writeTarget struct {
 	number   int
 	id       string
 	value    any
+	source   bool
 }
 
 func (w Writer) WriteGitHubImport(imported model.GitHubImport) error {
@@ -39,7 +40,7 @@ func (w Writer) WriteGitHubImport(imported model.GitHubImport) error {
 	}
 
 	for _, target := range gitHubImportTargets(imported) {
-		if err := writeJSON(filepath.Join(w.Root, target.relative), target.value); err != nil {
+		if err := w.writeTarget(target); err != nil {
 			return err
 		}
 	}
@@ -58,7 +59,7 @@ func (w Writer) WriteGitHubAudit(audit model.GitHubAudit) error {
 		return err
 	}
 	for _, target := range gitHubAuditTargets(audit) {
-		if err := writeJSON(filepath.Join(w.Root, target.relative), target.value); err != nil {
+		if err := w.writeTarget(target); err != nil {
 			return err
 		}
 	}
@@ -106,7 +107,7 @@ func gitHubImportTargets(imported model.GitHubImport) []writeTarget {
 	source := imported.Source
 	source.Objects = sourceObjectRefs(targets)
 	return append([]writeTarget{
-		{relative: sourceManifestPath(imported.Source), object: "source", id: imported.Source.System + ":" + imported.Source.Owner + "/" + imported.Source.Repo, value: source},
+		{relative: sourceManifestPath(imported.Source), object: "source", id: imported.Source.System + ":" + imported.Source.Owner + "/" + imported.Source.Repo, value: source, source: true},
 	}, targets...)
 }
 
@@ -158,7 +159,7 @@ func gitHubAuditTargets(audit model.GitHubAudit) []writeTarget {
 		source.Objects = upsertSourceObjectRef(source.Objects, ref)
 	}
 	return []writeTarget{
-		{relative: sourceManifestPath(source), object: "source", id: source.System + ":" + source.Owner + "/" + source.Repo, value: source},
+		{relative: sourceManifestPath(source), object: "source", id: source.System + ":" + source.Owner + "/" + source.Repo, value: source, source: true},
 		auditTarget,
 	}
 }
@@ -197,11 +198,71 @@ func (w Writer) RecordSourceOperation(source model.Source, operation model.Opera
 	for i, existing := range current.Operations {
 		if existing.ID == ref.ID {
 			current.Operations[i] = ref
-			return writeJSON(path, current)
+			return w.writeSourceManifest(path, current)
 		}
 	}
 	current.Operations = append(current.Operations, ref)
-	return writeJSON(path, current)
+	return w.writeSourceManifest(path, current)
+}
+
+func (w Writer) writeTarget(target writeTarget) error {
+	path := filepath.Join(w.Root, target.relative)
+	if target.source {
+		source, ok := target.value.(model.Source)
+		if !ok {
+			return fmt.Errorf("source target has unexpected value type %T", target.value)
+		}
+		return w.writeSourceManifest(path, source)
+	}
+	return writeJSON(path, target.value)
+}
+
+func (w Writer) writeSourceManifest(path string, source model.Source) error {
+	signature, err := w.sourceSignature(source)
+	if err != nil {
+		return err
+	}
+	source.Signature = signature
+	return writeJSON(path, source)
+}
+
+func (w Writer) sourceSignature(source model.Source) (*model.OperationSignature, error) {
+	identity, err := DefaultIdentity(w.Root)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	privateKey, err := defaultPrivateKey(w.Root)
+	if err != nil {
+		return nil, err
+	}
+	data, err := sourceSigningBytes(source)
+	if err != nil {
+		return nil, err
+	}
+	return w.signPayload(identity, privateKey, data)
+}
+
+func sourceSigningBytes(source model.Source) ([]byte, error) {
+	source.Signature = nil
+	value := struct {
+		System     string                     `json:"system"`
+		Owner      string                     `json:"owner"`
+		Repo       string                     `json:"repo"`
+		URL        string                     `json:"url"`
+		Objects    []model.SourceObjectRef    `json:"objects,omitempty"`
+		Operations []model.SourceOperationRef `json:"operations,omitempty"`
+	}{
+		System:     source.System,
+		Owner:      source.Owner,
+		Repo:       source.Repo,
+		URL:        source.URL,
+		Objects:    source.Objects,
+		Operations: source.Operations,
+	}
+	return canonicalJSON(value)
 }
 
 func sourceObjectRef(target writeTarget) (model.SourceObjectRef, error) {

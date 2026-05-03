@@ -1,9 +1,9 @@
 # Signing
 
-Waystone can sign operation records with a local Ed25519 identity.
+Waystone can sign operation records and source manifests with a local Ed25519
+identity.
 
-This is intentionally narrow. Source manifests and exported archives are not
-signed yet.
+This is intentionally narrow. Exported archives are not signed yet.
 
 ## Goals
 
@@ -30,8 +30,9 @@ Signing is being introduced in this order:
 3. Exported archives
 
 Operation records are first because they are the ledger's history of local
-actions. Source manifests depend on object refs and operation refs. Exported
-archives can be signed after the inner ledger format is stable.
+actions. Source manifests come next because they bind source identity, object
+refs and operation refs. Exported archives can be signed after the inner ledger
+format is stable.
 
 ## Operation Records
 
@@ -64,8 +65,8 @@ To verify signatures:
 waystone ledger verify --strict --signatures
 ```
 
-Unsigned operation records are reported, not rejected. Invalid signatures are
-integrity failures.
+Unsigned operation records and source manifests are reported, not rejected.
+Invalid signatures are integrity failures.
 
 Operation signing proves that the operation record was produced by the local
 private key corresponding to the recorded public identity. It does not prove
@@ -77,7 +78,7 @@ Source manifests already list object refs and operation refs. A signed source
 manifest should prove that a particular set of objects and operations belonged
 to a source at the time the manifest was written.
 
-Signing source manifests won't replace per-object hashes. The hashes still
+Signing source manifests does not replace per-object hashes. The hashes still
 allow `ledger verify --strict` to detect manual edits to individual files.
 
 ## Archives

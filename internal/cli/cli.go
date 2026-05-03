@@ -412,8 +412,13 @@ func runLedgerVerify(args []string, stdout io.Writer) error {
 		}
 	}
 	var signatureVerification ledger.OperationSignatureVerification
+	var sourceSignatureVerification ledger.SourceSignatureVerification
 	if *signatures {
 		signatureVerification, err = reader.VerifyOperationSignatures()
+		if err != nil {
+			return err
+		}
+		sourceSignatureVerification, err = reader.VerifySourceSignatures()
 		if err != nil {
 			return err
 		}
@@ -449,12 +454,13 @@ func runLedgerVerify(args []string, stdout io.Writer) error {
 	}
 	if *jsonOutput {
 		return writeJSONOutput(stdout, map[string]any{
-			"ledger":     *root,
-			"files":      verification.Files,
-			"checksum":   verification.Checksum,
-			"operations": operationVerification,
-			"signatures": signatureVerification,
-			"operation":  operation.ID,
+			"ledger":            *root,
+			"files":             verification.Files,
+			"checksum":          verification.Checksum,
+			"operations":        operationVerification,
+			"signatures":        signatureVerification,
+			"source_signatures": sourceSignatureVerification,
+			"operation":         operation.ID,
 		})
 	}
 	writeField(stdout, "Ledger", *root)
@@ -469,6 +475,9 @@ func runLedgerVerify(args []string, stdout io.Writer) error {
 		writeField(stdout, "Signatures", signatureVerification.Operations)
 		writeField(stdout, "Valid signatures", signatureVerification.Valid)
 		writeField(stdout, "Unsigned", signatureVerification.Unsigned)
+		writeField(stdout, "Source signatures", sourceSignatureVerification.Sources)
+		writeField(stdout, "Valid source signatures", sourceSignatureVerification.Valid)
+		writeField(stdout, "Unsigned sources", sourceSignatureVerification.Unsigned)
 	}
 	writeField(stdout, "Operation", operation.ID)
 	return nil

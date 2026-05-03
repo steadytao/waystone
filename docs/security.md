@@ -28,17 +28,19 @@ waystone ledger verify --strict
 waystone ledger verify --strict --signatures
 ```
 
-Strict verification checks operation-chain hashes and recorded file hashes. Signature verification also checks signed operation records when a local signing identity has been used.
+Strict verification checks operation-chain hashes and recorded file hashes. Signature verification also checks signed operation records and source manifests when a local signing identity has been used.
 
-## Operation Signatures
+## Signatures
 
-Waystone signs new operation records when a default local identity exists.
+Waystone signs new operation records and source manifests when a default local identity exists.
 
 Operation signatures prove that a record was produced by the private key corresponding to the recorded public identity. They do not prove that imported GitHub content was true.
 
+Source manifest signatures prove that a source manifest indexed a specific set of object refs and operation refs. They do not replace per-object hashes.
+
 Unsigned records are reported because early ledgers may predate signing. Invalid signatures fail verification.
 
-Source manifests and archives are not signed yet.
+Archives are not signed yet.
 
 ## Reporting Security Issues
 

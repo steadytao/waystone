@@ -37,6 +37,12 @@ type OperationSignatureVerification struct {
 	Unsigned   int
 }
 
+type SourceSignatureVerification struct {
+	Sources  int
+	Valid    int
+	Unsigned int
+}
+
 func (r Reader) Verify() (Verification, error) {
 	var files []string
 	if err := filepath.WalkDir(r.Root, func(path string, entry os.DirEntry, err error) error {
@@ -237,6 +243,54 @@ func verifyOperationSignature(operation model.Operation) error {
 		return err
 	}
 	data, err := operationSigningBytes(operation)
+	if err != nil {
+		return err
+	}
+	if !ed25519.Verify(ed25519.PublicKey(publicKey), data, value) {
+		return fmt.Errorf("verification failed")
+	}
+	return nil
+}
+
+func (r Reader) VerifySourceSignatures() (SourceSignatureVerification, error) {
+	sources, err := r.Sources()
+	if err != nil {
+		return SourceSignatureVerification{}, err
+	}
+	verification := SourceSignatureVerification{Sources: len(sources)}
+	for _, source := range sources {
+		if source.Signature == nil || source.Signature.Value == "" {
+			verification.Unsigned++
+			continue
+		}
+		if err := verifySourceSignature(source); err != nil {
+			return SourceSignatureVerification{}, fmt.Errorf("source %s signature: %w", SourceSpec(source), err)
+		}
+		verification.Valid++
+	}
+	return verification, nil
+}
+
+func verifySourceSignature(source model.Source) error {
+	if source.Signature == nil {
+		return fmt.Errorf("missing signature")
+	}
+	signature := *source.Signature
+	if signature.Algorithm != identityAlgorithmEd25519 {
+		return fmt.Errorf("unsupported algorithm %q", signature.Algorithm)
+	}
+	publicKey, err := base64.StdEncoding.DecodeString(signature.PublicKey)
+	if err != nil {
+		return err
+	}
+	if len(publicKey) != ed25519.PublicKeySize {
+		return fmt.Errorf("public key has invalid length")
+	}
+	value, err := base64.StdEncoding.DecodeString(signature.Value)
+	if err != nil {
+		return err
+	}
+	data, err := sourceSigningBytes(source)
 	if err != nil {
 		return err
 	}
