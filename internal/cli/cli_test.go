@@ -209,6 +209,28 @@ func TestGitHubAuditCommandNoWriteLeavesLedgerEmpty(t *testing.T) {
 	}
 }
 
+func TestGitHubAuditCommandPrintsInaccessibleEvidence(t *testing.T) {
+	apiBase := githubAuditInaccessibleTestServer(t)
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"github", "audit", "--api-base", apiBase, "--no-write", "example/project"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error: %v stderr=%q", err, stderr.String())
+	}
+
+	for _, want := range []string{
+		"Branch protection inaccessible status=403",
+		"Repository secrets inaccessible status=403",
+		"Repository variables inaccessible status=403",
+		"Environments inaccessible status=403",
+		"GitHub Pages inaccessible status=403",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+		}
+	}
+}
+
 func TestAuditListAndShowCommands(t *testing.T) {
 	root := writeTestLedger(t)
 	audit := model.GitHubAudit{
@@ -1197,6 +1219,34 @@ func githubAuditTestServer(t *testing.T) string {
 			writeCLIContent(t, w, ".github/workflows/ci.yml", "name: CI\njobs:\n  test:\n    steps:\n      - uses: actions/checkout@v4\n")
 		case "/repos/example/project/releases":
 			fmt.Fprint(w, `[]`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+	return server.URL
+}
+
+func githubAuditInaccessibleTestServer(t *testing.T) string {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/user":
+			fmt.Fprint(w, `{"login":"tester"}`)
+		case "/repos/example/project":
+			fmt.Fprint(w, `{"id":1,"full_name":"example/project","description":"test project","html_url":"https://github.com/example/project","default_branch":"main","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-02T00:00:00Z"}`)
+		case "/repos/example/project/contents/.github/workflows":
+			http.NotFound(w, r)
+		case "/repos/example/project/releases":
+			fmt.Fprint(w, `[]`)
+		case "/repos/example/project/branches/main/protection",
+			"/repos/example/project/actions/secrets",
+			"/repos/example/project/actions/variables",
+			"/repos/example/project/environments",
+			"/repos/example/project/pages":
+			w.WriteHeader(http.StatusForbidden)
+			fmt.Fprint(w, `{"message":"forbidden"}`)
 		default:
 			http.NotFound(w, r)
 		}

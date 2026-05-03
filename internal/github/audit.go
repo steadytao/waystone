@@ -263,11 +263,14 @@ func (c *Client) auditBranchProtection(ctx context.Context, owner, repo, branch 
 
 func (c *Client) auditCount(ctx context.Context, path string) (model.GitHubAuditCount, error) {
 	var count ghCountEnvelope
-	ok, _, err := c.getMaybe(ctx, path, nil, &count)
+	ok, status, err := c.getMaybe(ctx, path, nil, &count)
 	if err != nil {
 		return model.GitHubAuditCount{}, err
 	}
 	if !ok {
+		if status == http.StatusForbidden || status == http.StatusUnauthorized {
+			return model.GitHubAuditCount{Inaccessible: true, InaccessibleStatusCode: status}, nil
+		}
 		return model.GitHubAuditCount{}, nil
 	}
 	return model.GitHubAuditCount{Accessible: true, Count: count.TotalCount}, nil
@@ -275,11 +278,14 @@ func (c *Client) auditCount(ctx context.Context, path string) (model.GitHubAudit
 
 func (c *Client) auditPages(ctx context.Context, owner, repo string) (model.GitHubAuditPresence, error) {
 	var pages ghPages
-	ok, _, err := c.getMaybe(ctx, fmt.Sprintf("/repos/%s/%s/pages", owner, repo), nil, &pages)
+	ok, status, err := c.getMaybe(ctx, fmt.Sprintf("/repos/%s/%s/pages", owner, repo), nil, &pages)
 	if err != nil {
 		return model.GitHubAuditPresence{}, err
 	}
 	if !ok {
+		if status == http.StatusForbidden || status == http.StatusUnauthorized {
+			return model.GitHubAuditPresence{Inaccessible: true, InaccessibleStatusCode: status}, nil
+		}
 		return model.GitHubAuditPresence{}, nil
 	}
 	return model.GitHubAuditPresence{Present: true, Paths: []string{pages.HTMLURL}}, nil

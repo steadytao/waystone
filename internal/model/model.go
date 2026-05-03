@@ -67,8 +67,10 @@ type GitHubActionUse struct {
 }
 
 type GitHubAuditPresence struct {
-	Present bool     `json:"present"`
-	Paths   []string `json:"paths,omitempty"`
+	Present                bool     `json:"present"`
+	Paths                  []string `json:"paths,omitempty"`
+	Inaccessible           bool     `json:"inaccessible,omitempty"`
+	InaccessibleStatusCode int      `json:"inaccessible_status_code,omitempty"`
 }
 
 type GitHubAuditEvidenceItem struct {
@@ -89,8 +91,10 @@ type GitHubBranchProtection struct {
 }
 
 type GitHubAuditCount struct {
-	Accessible bool `json:"accessible"`
-	Count      int  `json:"count"`
+	Accessible             bool `json:"accessible"`
+	Count                  int  `json:"count"`
+	Inaccessible           bool `json:"inaccessible,omitempty"`
+	InaccessibleStatusCode int  `json:"inaccessible_status_code,omitempty"`
 }
 
 type GitHubReleaseAssets struct {

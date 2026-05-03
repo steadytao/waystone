@@ -2745,6 +2745,10 @@ func writeActionSummary(w io.Writer, actions []model.GitHubActionUse) {
 }
 
 func writePresence(w io.Writer, label string, presence model.GitHubAuditPresence) {
+	if presence.Inaccessible {
+		fmt.Fprintf(w, "- %s inaccessible status=%d\n", label, presence.InaccessibleStatusCode)
+		return
+	}
 	if !presence.Present {
 		return
 	}
@@ -2769,6 +2773,10 @@ func writeBranchProtection(w io.Writer, protection model.GitHubBranchProtection)
 }
 
 func writeAuditCount(w io.Writer, label string, count model.GitHubAuditCount) {
+	if count.Inaccessible {
+		fmt.Fprintf(w, "- %s inaccessible status=%d\n", label, count.InaccessibleStatusCode)
+		return
+	}
 	if !count.Accessible || count.Count == 0 {
 		return
 	}
