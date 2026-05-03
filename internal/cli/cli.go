@@ -98,9 +98,9 @@ func runAuditList(args []string, stdout io.Writer) error {
 	var audits []model.GitHubAudit
 	var err error
 	if *sourceFlag != "" {
-		source, err := ledger.ParseSourceSpec(*sourceFlag)
-		if err != nil {
-			return err
+		source, parseErr := ledger.ParseSourceSpec(*sourceFlag)
+		if parseErr != nil {
+			return parseErr
 		}
 		audits, err = reader.SourceAudits(source)
 	} else {
