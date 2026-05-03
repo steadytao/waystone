@@ -12,7 +12,7 @@ Waystone is a ledger. Users need to know what commands changed or verified the l
 
 Plain file mtimes are not enough. They are easy to change, platform-specific and not meaningful after archive export or import.
 
-Full cryptographic signing is planned but not implemented.
+This ADR defines the hash and chain boundary. Later ADRs define signing on top of this boundary.
 
 ## Decision
 
@@ -36,6 +36,6 @@ This decision means that:
 - local edits to recorded objects are detectable with `waystone ledger verify --strict`
 - operation records form an append-only chain by convention
 - `ledger diff` can report source-owned changes since a previous operation
-- signing can later cover the same canonical operation representation
+- operation signing can cover the same canonical operation representation
 
-This is integrity evidence, not trusted authorship. Trusted authorship requires signatures.
+This is integrity evidence, not trusted authorship. Operation signing is defined separately in [`0010-local-operation-signing.md`](0010-local-operation-signing.md).

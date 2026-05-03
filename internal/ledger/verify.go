@@ -4,7 +4,9 @@
 package ledger
 
 import (
+	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -27,6 +29,12 @@ type OperationVerification struct {
 	Files      int
 	Checksum   string
 	Changes    []model.ObjectChange
+}
+
+type OperationSignatureVerification struct {
+	Operations int
+	Valid      int
+	Unsigned   int
 }
 
 func (r Reader) Verify() (Verification, error) {
@@ -188,6 +196,54 @@ func (r Reader) VerifyOperations() (OperationVerification, error) {
 		Checksum:   hex.EncodeToString(hash.Sum(nil)),
 		Changes:    changes,
 	}, nil
+}
+
+func (r Reader) VerifyOperationSignatures() (OperationSignatureVerification, error) {
+	operations, err := r.Operations()
+	if err != nil {
+		return OperationSignatureVerification{}, err
+	}
+	verification := OperationSignatureVerification{Operations: len(operations)}
+	for _, operation := range operations {
+		if operation.Signature == nil || operation.Signature.Value == "" {
+			verification.Unsigned++
+			continue
+		}
+		if err := verifyOperationSignature(operation); err != nil {
+			return OperationSignatureVerification{}, fmt.Errorf("operation %s signature: %w", operation.ID, err)
+		}
+		verification.Valid++
+	}
+	return verification, nil
+}
+
+func verifyOperationSignature(operation model.Operation) error {
+	if operation.Signature == nil {
+		return fmt.Errorf("missing signature")
+	}
+	signature := *operation.Signature
+	if signature.Algorithm != identityAlgorithmEd25519 {
+		return fmt.Errorf("unsupported algorithm %q", signature.Algorithm)
+	}
+	publicKey, err := base64.StdEncoding.DecodeString(signature.PublicKey)
+	if err != nil {
+		return err
+	}
+	if len(publicKey) != ed25519.PublicKeySize {
+		return fmt.Errorf("public key has invalid length")
+	}
+	value, err := base64.StdEncoding.DecodeString(signature.Value)
+	if err != nil {
+		return err
+	}
+	data, err := operationSigningBytes(operation)
+	if err != nil {
+		return err
+	}
+	if !ed25519.Verify(ed25519.PublicKey(publicKey), data, value) {
+		return fmt.Errorf("verification failed")
+	}
+	return nil
 }
 
 func (r Reader) fileHash(relative string) (string, error) {

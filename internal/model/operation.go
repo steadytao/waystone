@@ -6,18 +6,19 @@ package model
 import "time"
 
 type Operation struct {
-	ID                string            `json:"id"`
-	PreviousOperation string            `json:"previous_operation,omitempty"`
-	OperationHash     string            `json:"operation_hash,omitempty"`
-	Command           string            `json:"command"`
-	Args              []string          `json:"args,omitempty"`
-	StartedAt         time.Time         `json:"started_at"`
-	FinishedAt        time.Time         `json:"finished_at"`
-	Actor             OperationActor    `json:"actor"`
-	Auth              OperationAuth     `json:"auth,omitempty"`
-	Input             map[string]string `json:"input,omitempty"`
-	Output            OperationOutput   `json:"output"`
-	Changes           []ObjectChange    `json:"changes,omitempty"`
+	ID                string              `json:"id"`
+	PreviousOperation string              `json:"previous_operation,omitempty"`
+	OperationHash     string              `json:"operation_hash,omitempty"`
+	Command           string              `json:"command"`
+	Args              []string            `json:"args,omitempty"`
+	StartedAt         time.Time           `json:"started_at"`
+	FinishedAt        time.Time           `json:"finished_at"`
+	Actor             OperationActor      `json:"actor"`
+	Auth              OperationAuth       `json:"auth,omitempty"`
+	Input             map[string]string   `json:"input,omitempty"`
+	Output            OperationOutput     `json:"output"`
+	Changes           []ObjectChange      `json:"changes,omitempty"`
+	Signature         *OperationSignature `json:"signature,omitempty"`
 }
 
 type OperationActor struct {
@@ -60,4 +61,11 @@ type ObjectChange struct {
 	ID     string `json:"id,omitempty"`
 	Path   string `json:"path"`
 	SHA256 string `json:"sha256,omitempty"`
+}
+
+type OperationSignature struct {
+	Algorithm  string `json:"algorithm,omitempty"`
+	IdentityID string `json:"identity_id,omitempty"`
+	PublicKey  string `json:"public_key,omitempty"`
+	Value      string `json:"value,omitempty"`
 }

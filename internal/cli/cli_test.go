@@ -74,6 +74,44 @@ func TestGitHubAuthUsage(t *testing.T) {
 	}
 }
 
+func TestIdentityInitShowAndOperationSigning(t *testing.T) {
+	root := writeTestLedger(t)
+	var stdout, stderr bytes.Buffer
+
+	if err := Run(context.Background(), []string{"identity", "init", "--ledger", root}, &stdout, &stderr); err != nil {
+		t.Fatalf("identity init returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Identity") {
+		t.Fatalf("stdout = %q, want identity output", stdout.String())
+	}
+	stdout.Reset()
+	if err := Run(context.Background(), []string{"identity", "show", "--ledger", root}, &stdout, &stderr); err != nil {
+		t.Fatalf("identity show returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "ed25519") {
+		t.Fatalf("stdout = %q, want identity algorithm", stdout.String())
+	}
+	stdout.Reset()
+	if err := Run(context.Background(), []string{"ledger", "verify", "--ledger", root}, &stdout, &stderr); err != nil {
+		t.Fatalf("ledger verify returned error: %v", err)
+	}
+	operations, err := (ledger.Reader{Root: root}).Operations()
+	if err != nil {
+		t.Fatalf("Operations returned error: %v", err)
+	}
+	last := operations[len(operations)-1]
+	if last.Signature == nil || last.Signature.Value == "" || last.Signature.IdentityID == "" {
+		t.Fatalf("operation signature = %#v, want signed operation", last.Signature)
+	}
+	stdout.Reset()
+	if err := Run(context.Background(), []string{"ledger", "verify", "--strict", "--signatures", "--ledger", root}, &stdout, &stderr); err != nil {
+		t.Fatalf("strict signature verify returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Signatures") || !strings.Contains(stdout.String(), "Unsigned") {
+		t.Fatalf("stdout = %q, want signature verification summary", stdout.String())
+	}
+}
+
 func TestGitHubAuditCommandPrintsExitReadinessReport(t *testing.T) {
 	apiBase := githubAuditTestServer(t)
 	var stdout, stderr bytes.Buffer

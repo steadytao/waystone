@@ -26,6 +26,17 @@ Waystone may record Git config name and email. It records local OS username and 
 
 GitHub operations may record authenticated GitHub login. They do not record the token.
 
+## Signing Identities
+
+`waystone identity init` creates a local Ed25519 signing identity for operation
+records.
+
+The public identity is stored in the ledger. Private signing material is local
+key material and is excluded from ledger exports.
+
+Operation signatures do not add local OS username or hostname. Use `--local`
+explicitly if a command should record that actor metadata.
+
 ## Network Access
 
 GitHub import, refresh and safe archive import may contact GitHub.

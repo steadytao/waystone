@@ -13,6 +13,22 @@ waystone version
 waystone version --json
 ```
 
+## Identity
+
+```sh
+waystone identity init
+waystone identity init --name steadytao
+waystone identity show
+waystone identity show --json
+```
+
+`identity init` creates a local Ed25519 signing identity for operation records.
+It writes a signed operation record. New operation records are signed
+automatically once a default identity exists.
+
+`identity show` prints the public identity. Private key material is local and is
+not included in ledger exports.
+
 ## GitHub Authentication
 
 ```sh
@@ -108,6 +124,7 @@ waystone ledger history
 waystone ledger show-operation <operation-id>
 waystone ledger verify
 waystone ledger verify --strict
+waystone ledger verify --strict --signatures
 waystone ledger doctor
 waystone ledger doctor --stale-after 7d
 waystone ledger diff --source github:steadytao/waymark --since <operation-id>
@@ -117,6 +134,8 @@ waystone ledger diff --source github:steadytao/waymark --since <operation-id> --
 `ledger verify` checks JSON files and writes a verification operation.
 
 `ledger verify --strict` also checks operation-chain integrity and recorded file hashes. `--operations` is an alias.
+
+`ledger verify --strict --signatures` also verifies operation signatures. Unsigned records are reported, not rejected. Invalid signatures fail verification.
 
 `ledger doctor` reports practical ledger problems such as no default source, stale sources, missing operation history, ambiguous issue numbers or failed integrity checks.
 

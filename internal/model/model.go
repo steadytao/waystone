@@ -5,6 +5,14 @@ package model
 
 import "time"
 
+type Identity struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name,omitempty"`
+	Algorithm string    `json:"algorithm"`
+	PublicKey string    `json:"public_key"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 type GitHubImport struct {
 	Project        Project         `json:"project"`
 	Source         Source          `json:"source"`

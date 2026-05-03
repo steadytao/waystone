@@ -5,9 +5,12 @@ package ledger
 
 import (
 	"bytes"
+	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -37,6 +40,11 @@ func (w Writer) WriteOperation(operation model.Operation) error {
 		return err
 	}
 	operation.OperationHash = hash
+	signature, err := w.operationSignature(operation)
+	if err != nil {
+		return err
+	}
+	operation.Signature = signature
 	dir := filepath.Join(w.Root, "operations")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
@@ -46,6 +54,7 @@ func (w Writer) WriteOperation(operation model.Operation) error {
 
 func OperationHash(operation model.Operation) (string, error) {
 	operation.OperationHash = ""
+	operation.Signature = nil
 	data, err := canonicalOperationJSON(operation)
 	if err != nil {
 		return "", err
@@ -54,11 +63,68 @@ func OperationHash(operation model.Operation) (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
+func (w Writer) operationSignature(operation model.Operation) (*model.OperationSignature, error) {
+	identity, err := DefaultIdentity(w.Root)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	privateKey, err := defaultPrivateKey(w.Root)
+	if err != nil {
+		return nil, err
+	}
+	data, err := operationSigningBytes(operation)
+	if err != nil {
+		return nil, err
+	}
+	return &model.OperationSignature{
+		Algorithm:  identity.Algorithm,
+		IdentityID: identity.ID,
+		PublicKey:  identity.PublicKey,
+		Value:      base64.StdEncoding.EncodeToString(ed25519.Sign(privateKey, data)),
+	}, nil
+}
+
+func operationSigningBytes(operation model.Operation) ([]byte, error) {
+	operation.OperationHash = ""
+	operation.Signature = nil
+	return canonicalOperationJSON(operation)
+}
+
 func canonicalOperationJSON(operation model.Operation) ([]byte, error) {
+	value := struct {
+		ID                string                `json:"id"`
+		PreviousOperation string                `json:"previous_operation,omitempty"`
+		OperationHash     string                `json:"operation_hash,omitempty"`
+		Command           string                `json:"command"`
+		Args              []string              `json:"args,omitempty"`
+		StartedAt         time.Time             `json:"started_at"`
+		FinishedAt        time.Time             `json:"finished_at"`
+		Actor             model.OperationActor  `json:"actor"`
+		Auth              model.OperationAuth   `json:"auth,omitempty"`
+		Input             map[string]string     `json:"input,omitempty"`
+		Output            model.OperationOutput `json:"output"`
+		Changes           []model.ObjectChange  `json:"changes,omitempty"`
+	}{
+		ID:                operation.ID,
+		PreviousOperation: operation.PreviousOperation,
+		OperationHash:     operation.OperationHash,
+		Command:           operation.Command,
+		Args:              operation.Args,
+		StartedAt:         operation.StartedAt,
+		FinishedAt:        operation.FinishedAt,
+		Actor:             operation.Actor,
+		Auth:              operation.Auth,
+		Input:             operation.Input,
+		Output:            operation.Output,
+		Changes:           operation.Changes,
+	}
 	var b bytes.Buffer
 	encoder := json.NewEncoder(&b)
 	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(operation); err != nil {
+	if err := encoder.Encode(value); err != nil {
 		return nil, err
 	}
 	return b.Bytes(), nil

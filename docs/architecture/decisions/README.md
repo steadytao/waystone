@@ -31,6 +31,7 @@ Current records:
 - [`0007-archive-format.md`](0007-archive-format.md)
 - [`0008-signing-order.md`](0008-signing-order.md)
 - [`0009-agent-instructions.md`](0009-agent-instructions.md)
+- [`0010-local-operation-signing.md`](0010-local-operation-signing.md)
 
 ## Notes
 

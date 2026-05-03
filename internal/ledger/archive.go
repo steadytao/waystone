@@ -45,15 +45,18 @@ func ExportArchive(root, archivePath string) error {
 		if entry.IsDir() {
 			return nil
 		}
-		info, err := entry.Info()
-		if err != nil {
-			return err
-		}
 		relative, err := filepath.Rel(root, filePath)
 		if err != nil {
 			return err
 		}
 		name := filepath.ToSlash(relative)
+		if isPrivateIdentityKey(name) {
+			return nil
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
 		header, err := tar.FileInfoHeader(info, "")
 		if err != nil {
 			return err
@@ -71,6 +74,10 @@ func ExportArchive(root, archivePath string) error {
 		_, err = io.Copy(tw, in)
 		return err
 	})
+}
+
+func isPrivateIdentityKey(name string) bool {
+	return strings.HasPrefix(filepath.ToSlash(name), "identities/") && strings.HasSuffix(name, ".key")
 }
 
 type ArchiveInspection struct {

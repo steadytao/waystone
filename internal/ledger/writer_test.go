@@ -171,6 +171,46 @@ func TestWriteGitHubAuditRecordsAuditObjectAndSourceRefs(t *testing.T) {
 	}
 }
 
+func TestWriteOperationSignsWhenDefaultIdentityExists(t *testing.T) {
+	root := t.TempDir()
+	identity, err := CreateDefaultIdentity(root, "test")
+	if err != nil {
+		t.Fatalf("CreateDefaultIdentity returned error: %v", err)
+	}
+	operation := model.Operation{
+		ID:         NewOperationID("ledger verify", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)),
+		Command:    "ledger verify",
+		StartedAt:  time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		FinishedAt: time.Date(2026, 1, 1, 0, 1, 0, 0, time.UTC),
+		Output:     model.OperationOutput{Ledger: root},
+	}
+
+	if err := (Writer{Root: root}).WriteOperation(operation); err != nil {
+		t.Fatalf("WriteOperation returned error: %v", err)
+	}
+	operations, err := (Reader{Root: root}).Operations()
+	if err != nil {
+		t.Fatalf("Operations returned error: %v", err)
+	}
+	if len(operations) != 1 || operations[0].Signature == nil || operations[0].Signature.IdentityID != identity.ID {
+		t.Fatalf("operations = %#v, want signed operation", operations)
+	}
+	verification, err := (Reader{Root: root}).VerifyOperationSignatures()
+	if err != nil {
+		t.Fatalf("VerifyOperationSignatures returned error: %v", err)
+	}
+	if verification.Valid != 1 || verification.Unsigned != 0 {
+		t.Fatalf("verification = %#v, want one valid signature", verification)
+	}
+	operations[0].Output.Ledger = filepath.Join(root, "tampered")
+	if err := writeJSON(filepath.Join(root, operationRelativePath(operations[0].ID)), operations[0]); err != nil {
+		t.Fatalf("writeJSON returned error: %v", err)
+	}
+	if _, err := (Reader{Root: root}).VerifyOperationSignatures(); err == nil {
+		t.Fatal("VerifyOperationSignatures returned nil error for tampered operation")
+	}
+}
+
 func TestSourcePathIsSystemScoped(t *testing.T) {
 	source := model.Source{System: "waystone", Owner: "example", Repo: "project"}
 	if got := SourcePath(source); got != "imports/waystone/example-project-759b2c42ed72.json" {

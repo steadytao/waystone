@@ -23,7 +23,7 @@ This directory contains the project, architecture, ledger, CLI, security and dev
 
 - [`operations.md`](operations.md): command history and operation-chain semantics
 - [`search.md`](search.md): local issue and pull request search
-- [`signing.md`](signing.md): planned signing order
+- [`signing.md`](signing.md): operation signing model
 - [`privacy.md`](privacy.md): token, actor metadata and local data handling
 - [`security.md`](security.md): practical security notes
 
