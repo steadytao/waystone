@@ -47,6 +47,24 @@ func (w Writer) WriteGitHubImport(imported model.GitHubImport) error {
 	return nil
 }
 
+func (w Writer) WriteGitHubAudit(audit model.GitHubAudit) error {
+	if w.Root == "" {
+		return fmt.Errorf("ledger root must not be empty")
+	}
+	if audit.ID == "" {
+		return fmt.Errorf("audit ID must not be empty")
+	}
+	if err := w.writeLedgerMetadata(); err != nil {
+		return err
+	}
+	for _, target := range gitHubAuditTargets(audit) {
+		if err := writeJSON(filepath.Join(w.Root, target.relative), target.value); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (w Writer) writeLedgerMetadata() error {
 	now := time.Now().UTC()
 	ledger := model.Ledger{
@@ -121,6 +139,30 @@ func gitHubImportObjectTargets(imported model.GitHubImport) []writeTarget {
 	return targets
 }
 
+func gitHubAuditTarget(audit model.GitHubAudit) writeTarget {
+	audit.Source.Objects = nil
+	audit.Source.Operations = nil
+	return writeTarget{
+		relative: filepath.Join(sourceScopedPath(audit.Source), "audits", idFile(audit.ID)),
+		object:   "audit",
+		id:       audit.ID,
+		value:    audit,
+	}
+}
+
+func gitHubAuditTargets(audit model.GitHubAudit) []writeTarget {
+	auditTarget := gitHubAuditTarget(audit)
+	source := audit.Source
+	ref, err := sourceObjectRef(auditTarget)
+	if err == nil {
+		source.Objects = upsertSourceObjectRef(source.Objects, ref)
+	}
+	return []writeTarget{
+		{relative: sourceManifestPath(source), object: "source", id: source.System + ":" + source.Owner + "/" + source.Repo, value: source},
+		auditTarget,
+	}
+}
+
 func sourceObjectRefs(targets []writeTarget) []model.SourceObjectRef {
 	objects := make([]model.SourceObjectRef, 0, len(targets))
 	for _, target := range targets {
@@ -160,6 +202,31 @@ func (w Writer) RecordSourceOperation(source model.Source, operation model.Opera
 	}
 	current.Operations = append(current.Operations, ref)
 	return writeJSON(path, current)
+}
+
+func sourceObjectRef(target writeTarget) (model.SourceObjectRef, error) {
+	data, err := canonicalJSON(target.value)
+	if err != nil {
+		return model.SourceObjectRef{}, err
+	}
+	sum := sha256.Sum256(data)
+	return model.SourceObjectRef{
+		Object: target.object,
+		Number: target.number,
+		ID:     target.id,
+		Path:   filepath.ToSlash(target.relative),
+		SHA256: fmt.Sprintf("%x", sum[:]),
+	}, nil
+}
+
+func upsertSourceObjectRef(refs []model.SourceObjectRef, ref model.SourceObjectRef) []model.SourceObjectRef {
+	for i, existing := range refs {
+		if existing.Path == ref.Path {
+			refs[i] = ref
+			return refs
+		}
+	}
+	return append(refs, ref)
 }
 
 func writeJSON(path string, value any) error {

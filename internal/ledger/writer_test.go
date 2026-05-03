@@ -119,6 +119,58 @@ func TestRecordSourceOperationAddsOperationManifestEntry(t *testing.T) {
 	}
 }
 
+func TestWriteGitHubAuditRecordsAuditObjectAndSourceRefs(t *testing.T) {
+	root := t.TempDir()
+	writer := Writer{Root: root}
+	audit := model.GitHubAudit{
+		ID:          "github-audit-20260101t000000.000000000z",
+		Source:      model.Source{System: "github", Owner: "example", Repo: "project", URL: "https://github.com/example/project"},
+		GeneratedAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		Repository: model.GitHubAuditRepository{
+			ID:            1,
+			FullName:      "example/project",
+			URL:           "https://github.com/example/project",
+			DefaultBranch: "main",
+		},
+		Portable:           []string{"issues"},
+		NeedsMigrationPlan: []string{"GitHub Actions workflows"},
+	}
+	operation := model.Operation{
+		ID:         audit.ID,
+		Command:    "github audit",
+		StartedAt:  audit.GeneratedAt,
+		FinishedAt: audit.GeneratedAt,
+	}
+	audit.Source.Operations = []model.SourceOperationRef{
+		{ID: operation.ID, Command: operation.Command, Path: OperationPath(operation.ID), StartedAt: operation.StartedAt},
+	}
+
+	if err := writer.WriteGitHubAudit(audit); err != nil {
+		t.Fatalf("WriteGitHubAudit returned error: %v", err)
+	}
+
+	audits, err := Reader{Root: root}.SourceAudits(audit.Source)
+	if err != nil {
+		t.Fatalf("SourceAudits returned error: %v", err)
+	}
+	if len(audits) != 1 || audits[0].ID != audit.ID {
+		t.Fatalf("audits = %#v, want written audit", audits)
+	}
+	if len(audits[0].Source.Objects) != 0 || len(audits[0].Source.Operations) != 0 {
+		t.Fatalf("audit source embedded manifest refs: %#v", audits[0].Source)
+	}
+	source, err := Reader{Root: root}.Source(audit.Source)
+	if err != nil {
+		t.Fatalf("Source returned error: %v", err)
+	}
+	if len(source.Objects) != 1 || source.Objects[0].Object != "audit" {
+		t.Fatalf("source objects = %#v, want audit object ref", source.Objects)
+	}
+	if len(source.Operations) != 1 || source.Operations[0].ID != operation.ID {
+		t.Fatalf("source operations = %#v, want audit operation ref", source.Operations)
+	}
+}
+
 func TestSourcePathIsSystemScoped(t *testing.T) {
 	source := model.Source{System: "waystone", Owner: "example", Repo: "project"}
 	if got := SourcePath(source); got != "imports/waystone/example-project-759b2c42ed72.json" {

@@ -19,6 +19,7 @@ type GitHubImport struct {
 }
 
 type GitHubAudit struct {
+	ID                  string                    `json:"id"`
 	Repository          GitHubAuditRepository     `json:"repository"`
 	Source              Source                    `json:"source"`
 	GeneratedAt         time.Time                 `json:"generated_at"`

@@ -34,12 +34,15 @@ Credential rules:
 waystone github audit steadytao/waymark
 waystone github audit steadytao/waymark --json
 waystone github audit steadytao/waymark --verbose
+waystone github audit steadytao/waymark --no-write
 waystone github import steadytao/waymark
 waystone github import steadytao/waymark --v --concurrency 8
 waystone github refresh steadytao/waymark
 ```
 
 Audit inspects GitHub dependency surfaces that can make repository migration harder. The first slice reports workflow files, action references, Dependabot, CodeQL, issue templates, pull request templates and CODEOWNERS.
+
+Audit writes an audit object and operation record to `.waystone/` by default. Use `--no-write` for report-only output.
 
 Audit does not execute workflows or repository code. It does not collect secret values. Use `--verbose` or `-v` to list every action reference; default human output summarises action kinds to avoid noisy reports on large repositories.
 
@@ -118,6 +121,18 @@ waystone ledger diff --source github:steadytao/waymark --since <operation-id> --
 `ledger doctor` reports practical ledger problems such as no default source, stale sources, missing operation history, ambiguous issue numbers or failed integrity checks.
 
 `ledger diff` reads local operation records only. It does not contact the forge.
+
+## Audits
+
+```sh
+waystone audit list
+waystone audit list --source github:steadytao/waymark
+waystone audit show <audit-id>
+waystone audit show <audit-id> --verbose
+waystone audit show <audit-id> --json
+```
+
+Audit browse commands read locally persisted audit records. They do not contact GitHub.
 
 ## Archive Export And Import
 
