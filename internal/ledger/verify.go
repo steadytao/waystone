@@ -34,13 +34,17 @@ type OperationVerification struct {
 type OperationSignatureVerification struct {
 	Operations int
 	Valid      int
+	Trusted    int
+	Untrusted  int
 	Unsigned   int
 }
 
 type SourceSignatureVerification struct {
-	Sources  int
-	Valid    int
-	Unsigned int
+	Sources   int
+	Valid     int
+	Trusted   int
+	Untrusted int
+	Unsigned  int
 }
 
 func (r Reader) Verify() (Verification, error) {
@@ -209,6 +213,10 @@ func (r Reader) VerifyOperationSignatures() (OperationSignatureVerification, err
 	if err != nil {
 		return OperationSignatureVerification{}, err
 	}
+	policy, err := r.TrustPolicy()
+	if err != nil {
+		return OperationSignatureVerification{}, err
+	}
 	verification := OperationSignatureVerification{Operations: len(operations)}
 	for _, operation := range operations {
 		if operation.Signature == nil || operation.Signature.Value == "" {
@@ -219,6 +227,11 @@ func (r Reader) VerifyOperationSignatures() (OperationSignatureVerification, err
 			return OperationSignatureVerification{}, fmt.Errorf("operation %s signature: %w", operation.ID, err)
 		}
 		verification.Valid++
+		if policy.Trusts(operation.Signature.IdentityID) {
+			verification.Trusted++
+		} else {
+			verification.Untrusted++
+		}
 	}
 	return verification, nil
 }
@@ -257,6 +270,10 @@ func (r Reader) VerifySourceSignatures() (SourceSignatureVerification, error) {
 	if err != nil {
 		return SourceSignatureVerification{}, err
 	}
+	policy, err := r.TrustPolicy()
+	if err != nil {
+		return SourceSignatureVerification{}, err
+	}
 	verification := SourceSignatureVerification{Sources: len(sources)}
 	for _, source := range sources {
 		if source.Signature == nil || source.Signature.Value == "" {
@@ -267,6 +284,11 @@ func (r Reader) VerifySourceSignatures() (SourceSignatureVerification, error) {
 			return SourceSignatureVerification{}, fmt.Errorf("source %s signature: %w", SourceSpec(source), err)
 		}
 		verification.Valid++
+		if policy.Trusts(source.Signature.IdentityID) {
+			verification.Trusted++
+		} else {
+			verification.Untrusted++
+		}
 	}
 	return verification, nil
 }

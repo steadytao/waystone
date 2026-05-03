@@ -30,6 +30,7 @@ The format is plain JSON plus content hashes. It is designed to be inspectable, 
           audits/
   identities/
     default.json
+  trust.json
   operations/
     <operation-id>-<hash>.json
 ```
@@ -48,6 +49,8 @@ The format is plain JSON plus content hashes. It is designed to be inspectable, 
 
 `identities/` stores public local signing identities. Private signing keys are
 local key material and are excluded from ledger exports.
+
+`trust.json` stores local trust policy for Waystone signing identities.
 
 `audits/` stores GitHub exit-readiness audit records. Audit objects are source-scoped ledger evidence, not remote forge content.
 
@@ -118,7 +121,8 @@ Strict verification detects local tampering and accidental edits. It does not pr
 
 `--signatures` additionally verifies operation signatures and source manifest
 signatures. Unsigned records are reported because early ledgers may predate
-signing. Invalid signatures are integrity failures.
+signing. Valid signatures are reported as trusted or untrusted according to
+local trust policy. Invalid signatures are integrity failures.
 
 ## Archives
 

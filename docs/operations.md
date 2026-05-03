@@ -29,6 +29,7 @@ github import
 source refresh
 ledger verify --strict
 source default
+identity trust
 ```
 
 `args` stores command arguments for auditability. Commands must avoid recording secrets.
@@ -66,8 +67,8 @@ The chain is append-only by convention. A future compaction command must define 
 
 ## Signing
 
-If a default signing identity exists, Waystone signs new operation records and
-source manifests.
+If a default signing identity exists, Waystone signs new operation records,
+source manifests and archive manifests.
 
 The signature uses the same canonical operation representation as `operation_hash`, with both `operation_hash` and `signature` empty.
 
@@ -76,9 +77,12 @@ waystone identity init
 waystone ledger verify --strict --signatures
 ```
 
-`identity init` writes a signed operation record after creating the identity.
+`identity init` writes a signed operation record after creating and trusting
+the identity. `identity trust` and `identity untrust` also write operation
+records because they change ledger trust policy.
 
 Unsigned operation records and source manifests are reported but remain
-readable. Invalid signatures fail verification.
+readable. Valid signatures are reported as trusted or untrusted according to
+local trust policy. Invalid signatures fail verification.
 
 Signing must not make local OS username or hostname implicit. Privacy defaults must remain unchanged.

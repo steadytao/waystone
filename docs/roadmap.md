@@ -60,7 +60,7 @@ Create and manage portable issues inside a local Git repository.
 Candidate commands:
 ```sh
 waystone init
-waystone identity create
+waystone identity init
 waystone issue create
 waystone issue list
 waystone issue show <id>

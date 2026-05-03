@@ -46,6 +46,9 @@ func CreateDefaultIdentity(root, name string) (model.Identity, error) {
 	if err := writePrivateKey(defaultIdentityKeyPath(root), privateKey); err != nil {
 		return model.Identity{}, err
 	}
+	if err := (Writer{Root: root}).TrustIdentity(identity.ID); err != nil {
+		return model.Identity{}, err
+	}
 	return identity, nil
 }
 

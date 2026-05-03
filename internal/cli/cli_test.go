@@ -115,6 +115,58 @@ func TestIdentityInitShowAndOperationSigning(t *testing.T) {
 	}
 }
 
+func TestIdentityTrustCommands(t *testing.T) {
+	root := writeTestLedger(t)
+	var stdout, stderr bytes.Buffer
+
+	if err := Run(context.Background(), []string{"identity", "init", "--ledger", root}, &stdout, &stderr); err != nil {
+		t.Fatalf("identity init returned error: %v", err)
+	}
+	identity, err := ledger.DefaultIdentity(root)
+	if err != nil {
+		t.Fatalf("DefaultIdentity returned error: %v", err)
+	}
+
+	stdout.Reset()
+	if err := Run(context.Background(), []string{"identity", "list", "--ledger", root}, &stdout, &stderr); err != nil {
+		t.Fatalf("identity list returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), identity.ID) || !strings.Contains(stdout.String(), "trusted") {
+		t.Fatalf("stdout = %q, want trusted identity", stdout.String())
+	}
+
+	stdout.Reset()
+	if err := Run(context.Background(), []string{"identity", "untrust", "--ledger", root, identity.ID}, &stdout, &stderr); err != nil {
+		t.Fatalf("identity untrust returned error: %v", err)
+	}
+	stdout.Reset()
+	if err := Run(context.Background(), []string{"identity", "status", "--ledger", root}, &stdout, &stderr); err != nil {
+		t.Fatalf("identity status returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Untrusted") {
+		t.Fatalf("stdout = %q, want untrusted summary", stdout.String())
+	}
+
+	stdout.Reset()
+	if err := Run(context.Background(), []string{"identity", "trust", "--ledger", root, identity.ID}, &stdout, &stderr); err != nil {
+		t.Fatalf("identity trust returned error: %v", err)
+	}
+	operations, err := (ledger.Reader{Root: root}).Operations()
+	if err != nil {
+		t.Fatalf("Operations returned error: %v", err)
+	}
+	if operations[len(operations)-1].Command != "identity trust" {
+		t.Fatalf("last operation = %q, want identity trust", operations[len(operations)-1].Command)
+	}
+	stdout.Reset()
+	if err := Run(context.Background(), []string{"identity", "status", "--ledger", root}, &stdout, &stderr); err != nil {
+		t.Fatalf("identity status returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Trusted") {
+		t.Fatalf("stdout = %q, want trusted summary", stdout.String())
+	}
+}
+
 func TestGitHubAuditCommandPrintsExitReadinessReport(t *testing.T) {
 	apiBase := githubAuditTestServer(t)
 	var stdout, stderr bytes.Buffer

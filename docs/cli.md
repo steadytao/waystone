@@ -18,16 +18,25 @@ waystone version --json
 ```sh
 waystone identity init
 waystone identity init --name steadytao
+waystone identity list
 waystone identity show
 waystone identity show --json
+waystone identity status
+waystone identity trust <identity-id>
+waystone identity untrust <identity-id>
 ```
 
 `identity init` creates a local Ed25519 signing identity for operation records
-and source manifests. It writes a signed operation record. New operation records
-and source manifests are signed automatically once a default identity exists.
+and source manifests. It writes a signed operation record and trusts the new
+identity locally. New operation records and source manifests are signed
+automatically once a default identity exists.
 
 `identity show` prints the public identity. Private key material is local and is
 not included in ledger exports.
+
+`identity list`, `identity status`, `identity trust` and `identity untrust`
+manage local trust policy. Trust is ledger-local and based on Waystone identity
+IDs. It is not a global identity system.
 
 ## GitHub Authentication
 
@@ -135,7 +144,7 @@ waystone ledger diff --source github:steadytao/waymark --since <operation-id> --
 
 `ledger verify --strict` also checks operation-chain integrity and recorded file hashes. `--operations` is an alias.
 
-`ledger verify --strict --signatures` also verifies operation signatures and source manifest signatures. Unsigned records are reported, not rejected. Invalid signatures fail verification.
+`ledger verify --strict --signatures` also verifies operation signatures and source manifest signatures. Unsigned records are reported, not rejected. Valid signatures are reported as trusted or untrusted according to local trust policy. Invalid signatures fail verification.
 
 `ledger doctor` reports practical ledger problems such as no default source, stale sources, missing operation history, ambiguous issue numbers or failed integrity checks.
 
