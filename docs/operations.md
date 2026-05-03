@@ -64,8 +64,19 @@ Each operation records `operation_hash`, computed over the operation with that h
 
 The chain is append-only by convention. A future compaction command must define how it preserves or summarises this history before it is implemented.
 
-## Future Signing
+## Signing
 
-Signing should cover operation records first. The likely signing payload is the same canonical operation representation used for `operation_hash`, excluding the signature field once it exists.
+If a default signing identity exists, Waystone signs new operation records.
+
+The signature uses the same canonical operation representation as `operation_hash`, with both `operation_hash` and `signature` empty.
+
+```sh
+waystone identity init
+waystone ledger verify --strict --signatures
+```
+
+`identity init` writes a signed operation record after creating the identity.
+
+Unsigned records are reported but remain readable. Invalid signatures fail verification.
 
 Signing must not make local OS username or hostname implicit. Privacy defaults must remain unchanged.

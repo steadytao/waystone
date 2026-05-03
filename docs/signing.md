@@ -1,15 +1,16 @@
 # Signing
 
-Waystone does not yet sign ledger records. This document defines the intended
-direction so the implementation can be added without changing the core ledger
-model later.
+Waystone can sign operation records with a local Ed25519 identity.
+
+This is intentionally narrow. Source manifests and exported archives are not
+signed yet.
 
 ## Goals
 
 - make tampering detectable without trusting file mtimes or local filesystem
   metadata
 - bind operation records to the actor and command that produced them
-- let exported ledgers carry verifiable provenance
+- let exported ledgers carry verifiable provenance later
 - keep unsigned local use possible during the prototype phase
 
 ## Non-goals
@@ -23,7 +24,7 @@ model later.
 
 ## Signing Order
 
-I want signing introduced in this order:
+Signing is being introduced in this order:
 1. Operation records
 2. Source manifests
 3. Exported archives
@@ -34,7 +35,7 @@ archives can be signed after the inner ledger format is stable.
 
 ## Operation Records
 
-Each operation record eventually needs:
+Each operation record includes:
 - command
 - arguments
 - start and finish timestamps
@@ -46,8 +47,29 @@ Each operation record eventually needs:
 - previous operation hash
 - signature over canonical JSON
 
-The signature needs to cover the operation without its own signature field. The
-canonical representation must be deterministic across platforms.
+The signature covers the operation with `operation_hash` and `signature` empty.
+This avoids a self-referential signature and matches the existing operation-hash
+boundary.
+
+To create a local signing identity:
+```sh
+waystone identity init
+waystone identity show
+```
+
+When a default identity exists, new operation records are signed automatically.
+
+To verify signatures:
+```sh
+waystone ledger verify --strict --signatures
+```
+
+Unsigned operation records are reported, not rejected. Invalid signatures are
+integrity failures.
+
+Operation signing proves that the operation record was produced by the local
+private key corresponding to the recorded public identity. It does not prove
+that imported GitHub content was true.
 
 ## Source Manifests
 
@@ -68,13 +90,10 @@ key.
 
 ## Key Types
 
-The first implementation should prefer keys that are practical for developers:
-- SSH signing keys
-- age or minisign-style local keys
-- optional Git commit signing integration later
+The first implementation uses local Ed25519 keys.
 
-PGP support can be considered later but it can't be the only signing
-path.
+SSH signing, age or minisign-style keys, Git commit signing integration and PGP
+can be considered later.
 
 ## Verification Policy
 
@@ -82,6 +101,7 @@ Unsigned ledgers should remain readable while Waystone is experimental.
 
 Strict verification eventually needs to distinguish:
 - unsigned records
+- valid signatures
 - records signed by unknown keys
 - records signed by trusted keys
 - invalid signatures

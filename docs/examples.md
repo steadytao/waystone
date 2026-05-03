@@ -9,6 +9,11 @@ Authenticate with GitHub:
 waystone github auth login
 ```
 
+Create a local operation-signing identity:
+```sh
+waystone identity init
+```
+
 Import a repository:
 ```sh
 waystone github import steadytao/waymark
@@ -51,6 +56,7 @@ waystone pr show 14
 Run strict verification:
 ```sh
 waystone ledger verify --strict
+waystone ledger verify --strict --signatures
 ```
 
 Run practical health checks:

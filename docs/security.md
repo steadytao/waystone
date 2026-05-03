@@ -25,15 +25,20 @@ Use `--unsafe` only for trusted local archives or offline inspection workflows.
 Use:
 ```sh
 waystone ledger verify --strict
+waystone ledger verify --strict --signatures
 ```
 
-Strict verification checks operation-chain hashes and recorded file hashes. It detects accidental edits and many simple tampering cases. It does not yet use cryptographic signatures.
+Strict verification checks operation-chain hashes and recorded file hashes. Signature verification also checks signed operation records when a local signing identity has been used.
 
-## Current Unsigned Status
+## Operation Signatures
 
-Waystone does not yet sign operation records, source manifests or archives.
+Waystone signs new operation records when a default local identity exists.
 
-Until signing is implemented, strict verification proves local consistency, not trusted authorship.
+Operation signatures prove that a record was produced by the private key corresponding to the recorded public identity. They do not prove that imported GitHub content was true.
+
+Unsigned records are reported because early ledgers may predate signing. Invalid signatures fail verification.
+
+Source manifests and archives are not signed yet.
 
 ## Reporting Security Issues
 

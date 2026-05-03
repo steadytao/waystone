@@ -43,6 +43,8 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		return runAudit(args[1:], stdout, stderr)
 	case "github":
 		return runGitHub(ctx, args[1:], stdout, stderr)
+	case "identity":
+		return runIdentity(args[1:], stdout, stderr)
 	case "issue":
 		return runIssue(args[1:], stdout, stderr)
 	case "label":
@@ -64,6 +66,93 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		printUsage(stderr)
 		return fmt.Errorf("unknown command %q", args[0])
 	}
+}
+
+func runIdentity(args []string, stdout, stderr io.Writer) error {
+	if len(args) == 0 {
+		printIdentityUsage(stderr)
+		return errors.New("missing identity command")
+	}
+	switch args[0] {
+	case "init":
+		return runIdentityInit(args[1:], stdout)
+	case "show":
+		return runIdentityShow(args[1:], stdout)
+	default:
+		printIdentityUsage(stderr)
+		return fmt.Errorf("unknown identity command %q", args[0])
+	}
+}
+
+func runIdentityInit(args []string, stdout io.Writer) error {
+	fs := flag.NewFlagSet("waystone identity init", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	root := fs.String("ledger", ".waystone", "Waystone ledger directory")
+	name := fs.String("name", "", "identity display name")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return errors.New("usage: waystone identity init [flags]")
+	}
+	startedAt := time.Now().UTC()
+	identity, err := ledger.CreateDefaultIdentity(*root, *name)
+	if err != nil {
+		return err
+	}
+	verification, err := (ledger.Reader{Root: *root}).Verify()
+	if err != nil {
+		return err
+	}
+	finishedAt := time.Now().UTC()
+	operation := model.Operation{
+		ID:         ledger.NewOperationID("identity init", startedAt),
+		Command:    "identity init",
+		Args:       append([]string(nil), args...),
+		StartedAt:  startedAt,
+		FinishedAt: finishedAt,
+		Actor:      ledger.LocalActor(gitConfig("user.name"), gitConfig("user.email"), false),
+		Output: model.OperationOutput{
+			Ledger:    *root,
+			Unchanged: verification.Files,
+		},
+		Changes: verification.Changes,
+	}
+	if err := (ledger.Writer{Root: *root}).WriteOperation(operation); err != nil {
+		return err
+	}
+	writeField(stdout, "Identity", identity.ID)
+	writeField(stdout, "Algorithm", identity.Algorithm)
+	writeField(stdout, "Public key", identity.PublicKey)
+	writeField(stdout, "Operation", operation.ID)
+	return nil
+}
+
+func runIdentityShow(args []string, stdout io.Writer) error {
+	fs := flag.NewFlagSet("waystone identity show", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	root := fs.String("ledger", ".waystone", "Waystone ledger directory")
+	jsonOutput := fs.Bool("json", false, "write JSON output")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return errors.New("usage: waystone identity show [flags]")
+	}
+	identity, err := ledger.DefaultIdentity(*root)
+	if err != nil {
+		return err
+	}
+	if *jsonOutput {
+		return writeJSONOutput(stdout, identity)
+	}
+	writeField(stdout, "Identity", identity.ID)
+	if identity.Name != "" {
+		writeField(stdout, "Name", identity.Name)
+	}
+	writeField(stdout, "Algorithm", identity.Algorithm)
+	writeField(stdout, "Public key", identity.PublicKey)
+	return nil
 }
 
 func runAudit(args []string, stdout, stderr io.Writer) error {
@@ -303,6 +392,7 @@ func runLedgerVerify(args []string, stdout io.Writer) error {
 	includeLocal := fs.Bool("local", false, "include local OS user and hostname in operation records")
 	strict := fs.Bool("strict", false, "strictly verify operation chain and recorded file hashes")
 	operations := fs.Bool("operations", false, "strictly verify operation chain and recorded file hashes")
+	signatures := fs.Bool("signatures", false, "verify operation record signatures")
 	jsonOutput := fs.Bool("json", false, "write JSON output")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -321,6 +411,13 @@ func runLedgerVerify(args []string, stdout io.Writer) error {
 			return err
 		}
 	}
+	var signatureVerification ledger.OperationSignatureVerification
+	if *signatures {
+		signatureVerification, err = reader.VerifyOperationSignatures()
+		if err != nil {
+			return err
+		}
+	}
 	finishedAt := time.Now().UTC()
 	changes := append([]model.ObjectChange(nil), verification.Changes...)
 	command := "ledger verify"
@@ -330,6 +427,9 @@ func runLedgerVerify(args []string, stdout io.Writer) error {
 	} else if verifyOperations {
 		command = "ledger verify --operations"
 		changes = append(changes, operationVerification.Changes...)
+	}
+	if *signatures {
+		command += " --signatures"
 	}
 	operation := model.Operation{
 		ID:         ledger.NewOperationID(command, startedAt),
@@ -353,6 +453,7 @@ func runLedgerVerify(args []string, stdout io.Writer) error {
 			"files":      verification.Files,
 			"checksum":   verification.Checksum,
 			"operations": operationVerification,
+			"signatures": signatureVerification,
 			"operation":  operation.ID,
 		})
 	}
@@ -363,6 +464,11 @@ func runLedgerVerify(args []string, stdout io.Writer) error {
 		writeField(stdout, "Operations", operationVerification.Operations)
 		writeField(stdout, "Recorded files", operationVerification.Files)
 		writeField(stdout, "Operation checksum", operationVerification.Checksum)
+	}
+	if *signatures {
+		writeField(stdout, "Signatures", signatureVerification.Operations)
+		writeField(stdout, "Valid signatures", signatureVerification.Valid)
+		writeField(stdout, "Unsigned", signatureVerification.Unsigned)
 	}
 	writeField(stdout, "Operation", operation.ID)
 	return nil
@@ -3148,6 +3254,8 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  waystone github audit [flags] owner/repo")
 	fmt.Fprintln(w, "  waystone github import [flags] owner/repo")
 	fmt.Fprintln(w, "  waystone github refresh [flags] owner/repo")
+	fmt.Fprintln(w, "  waystone identity init [flags]")
+	fmt.Fprintln(w, "  waystone identity show [flags]")
 	fmt.Fprintln(w, "  waystone issue list [flags]")
 	fmt.Fprintln(w, "  waystone issue search [flags] <text>")
 	fmt.Fprintln(w, "  waystone issue show [flags] <number>")
@@ -3207,6 +3315,12 @@ func printIssueUsage(w io.Writer) {
 	fmt.Fprintln(w, "  waystone issue show [flags] <number>")
 	fmt.Fprintln(w, "  waystone issue comments [flags] <number>")
 	fmt.Fprintln(w, "  waystone issue timeline [flags] <number>")
+}
+
+func printIdentityUsage(w io.Writer) {
+	fmt.Fprintln(w, "Usage:")
+	fmt.Fprintln(w, "  waystone identity init [flags]")
+	fmt.Fprintln(w, "  waystone identity show [flags]")
 }
 
 func printLabelUsage(w io.Writer) {

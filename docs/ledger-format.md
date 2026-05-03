@@ -28,6 +28,8 @@ The format is plain JSON plus content hashes. It is designed to be inspectable, 
           milestones/
           releases/
           audits/
+  identities/
+    default.json
   operations/
     <operation-id>-<hash>.json
 ```
@@ -43,6 +45,9 @@ The format is plain JSON plus content hashes. It is designed to be inspectable, 
 `objects/` stores imported records grouped by source.
 
 `operations/` stores local command history.
+
+`identities/` stores public local signing identities. Private signing keys are
+local key material and are excluded from ledger exports.
 
 `audits/` stores GitHub exit-readiness audit records. Audit objects are source-scoped ledger evidence, not remote forge content.
 
@@ -89,10 +94,15 @@ They include:
 
 The operation hash covers the operation record with its own hash field empty. The previous-operation link creates an append-only operation chain.
 
+Signed operation records also include a signature. The signature covers the
+same canonical operation representation, with `operation_hash` and `signature`
+empty.
+
 ## Strict Verification
 
 ```sh
 waystone ledger verify --strict
+waystone ledger verify --strict --signatures
 ```
 
 Strict verification checks:
@@ -102,6 +112,10 @@ Strict verification checks:
 - recorded object hashes match local files
 
 Strict verification detects local tampering and accidental edits. It does not prove that the original remote forge content was correct.
+
+`--signatures` additionally verifies operation signatures. Unsigned records are
+reported because early ledgers may predate signing. Invalid signatures are
+integrity failures.
 
 ## Archives
 
@@ -122,6 +136,8 @@ waystone ledger export --format json --out waystone-ledger.json
 Safe import verifies archive shape and confirms GitHub sources through authenticated GitHub API access unless `--unsafe` is set.
 
 Import never executes ledger contents.
+
+Ledger exports include public identities, not private signing keys.
 
 ## Compatibility
 

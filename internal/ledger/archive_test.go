@@ -5,6 +5,7 @@ package ledger
 
 import (
 	"archive/tar"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -74,6 +75,27 @@ func TestImportArchiveRejectsUnsafePaths(t *testing.T) {
 	}
 }
 
+func TestExportArchiveExcludesPrivateIdentityKey(t *testing.T) {
+	root := writeTestLedger(t)
+	if _, err := CreateDefaultIdentity(root, "test"); err != nil {
+		t.Fatalf("CreateDefaultIdentity returned error: %v", err)
+	}
+
+	archive := filepath.Join(t.TempDir(), "ledger")
+	if err := ExportArchive(root, archive); err != nil {
+		t.Fatalf("ExportArchive returned error: %v", err)
+	}
+	names, err := archiveEntryNames(archive)
+	if err != nil {
+		t.Fatalf("archiveEntryNames returned error: %v", err)
+	}
+	for _, name := range names {
+		if name == "identities/default.key" {
+			t.Fatal("archive includes private identity key")
+		}
+	}
+}
+
 func TestExportSourceArchiveIncludesAuditObjects(t *testing.T) {
 	root := writeTestLedger(t)
 	audit := model.GitHubAudit{
@@ -124,6 +146,31 @@ func TestSafeRootedPathRejectsTraversal(t *testing.T) {
 				t.Fatal("SafeRootedPath returned nil error")
 			}
 		})
+	}
+}
+
+func archiveEntryNames(path string) ([]string, error) {
+	file, err := os.Open(path) // #nosec G304 -- test opens a temporary archive path.
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	decoder, err := zstd.NewReader(file)
+	if err != nil {
+		return nil, err
+	}
+	defer decoder.Close()
+	tr := tar.NewReader(decoder)
+	var names []string
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			return names, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		names = append(names, header.Name)
 	}
 }
 

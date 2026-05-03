@@ -56,6 +56,7 @@ The current prototype includes:
 - local issue and pull request search
 - operation records for ledger-changing and verification commands
 - object hashes and strict ledger verification
+- local Ed25519 signing for new operation records
 - ledger archive export, inspection and import
 - GoReleaser-based release structure with checksums, SBOMs and Sigstore bundles
 
@@ -69,7 +70,7 @@ Waystone currently aims to be:
 - a portable record format for Git repository collaboration data
 - a migration aid for projects moving between forges
 - a preservation tool for project context around code
-- a foundation for future signed operation records, source manifests and archives
+- a foundation for future signed source manifests and archives
 
 The narrow product thesis is:
 ```text
@@ -109,6 +110,11 @@ Authenticate with GitHub:
 waystone github auth login
 ```
 
+Create a local operation-signing identity:
+```bash
+waystone identity init
+```
+
 Audit GitHub migration surfaces:
 ```bash
 waystone github audit steadytao/waymark
@@ -138,6 +144,7 @@ waystone milestone list
 Verify the ledger:
 ```bash
 waystone ledger verify --strict
+waystone ledger verify --strict --signatures
 waystone ledger doctor
 waystone ledger status
 ```
@@ -151,6 +158,9 @@ waystone github auth logout
 waystone github audit owner/repo
 waystone github import owner/repo
 waystone github refresh owner/repo
+
+waystone identity init
+waystone identity show
 
 waystone audit list
 waystone audit show <audit-id>
@@ -201,8 +211,9 @@ The current layout is:
   ledger.json
   projects/
   objects/
-  operations/
   imports/
+  identities/
+  operations/
 ```
 
 The ledger is intended to preserve:
@@ -213,6 +224,7 @@ The ledger is intended to preserve:
 - which authenticated GitHub account was used where relevant
 - object hashes for local integrity checking
 - operation-chain links for strict verification
+- operation signatures when a local identity exists
 
 Sources are repo-specific namespaces. GitHub imports use `github:owner/repo`; `waystone:owner/repo` is reserved for future local Waystone records. Issue, pull request and milestone numbers are source-local, so overlapping numbers across sources do not imply the same record.
 
@@ -249,7 +261,9 @@ Waystone is local-first and privacy-minimal by default.
 
 Operation records may include the authenticated GitHub login. Local OS username and hostname are only recorded when `--local` is explicitly used.
 
-Waystone does not claim that local hashes or operation chains prevent a user with filesystem access from editing the ledger. They provide detection for accidental edits and unsynchronised local mutation. Cryptographic signing is planned but not yet implemented.
+Waystone does not claim that local hashes, operation chains or signatures prevent a user with filesystem access from editing the ledger. They provide detection for accidental edits, unsynchronised local mutation and invalid operation signatures.
+
+`waystone identity init` creates a local Ed25519 identity for operation signing. Public identity metadata is stored in the ledger. Private signing material is local key material and is excluded from ledger exports.
 
 ## Documentation
 
@@ -262,6 +276,7 @@ Core documents:
 - [docs/operations.md](docs/operations.md), operation records and command history
 - [docs/privacy.md](docs/privacy.md), token and actor metadata handling
 - [docs/security.md](docs/security.md), practical security notes
+- [docs/signing.md](docs/signing.md), operation signing model
 - [docs/roadmap.md](docs/roadmap.md), phased development plan
 
 Architecture:
