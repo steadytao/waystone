@@ -2712,6 +2712,14 @@ func writeGitHubAudit(w io.Writer, audit model.GitHubAudit, verbose bool) {
 	writePresence(w, "Issue templates", audit.IssueTemplates)
 	writePresence(w, "Pull request template", audit.PullRequestTemplate)
 	writePresence(w, "CODEOWNERS", audit.Codeowners)
+	writeBranchProtection(w, audit.BranchProtection)
+	writeAuditCount(w, "Repository secrets", audit.Secrets)
+	writeAuditCount(w, "Repository variables", audit.Variables)
+	writeAuditCount(w, "Environments", audit.Environments)
+	writePresence(w, "GitHub Pages", audit.Pages)
+	if audit.ReleaseAssets.Releases > 0 || audit.ReleaseAssets.Assets > 0 {
+		fmt.Fprintf(w, "- Release assets %d across %d releases\n", audit.ReleaseAssets.Assets, audit.ReleaseAssets.Releases)
+	}
 	fmt.Fprintln(w)
 
 	fmt.Fprintln(w, "Limitations")
@@ -2743,6 +2751,28 @@ func writePresence(w io.Writer, label string, presence model.GitHubAuditPresence
 	for _, path := range presence.Paths {
 		fmt.Fprintf(w, "- %s %s\n", label, path)
 	}
+}
+
+func writeBranchProtection(w io.Writer, protection model.GitHubBranchProtection) {
+	switch {
+	case protection.Present:
+		fmt.Fprintf(w, "- Branch protection required_checks=%d required_reviews=%t approvals=%d code_owner_reviews=%t admin_enforcement=%t\n",
+			protection.RequiredStatusChecks,
+			protection.RequiredReviews,
+			protection.RequiredApprovals,
+			protection.CodeOwnerReviews,
+			protection.AdminEnforcement,
+		)
+	case protection.Inaccessible:
+		fmt.Fprintf(w, "- Branch protection inaccessible status=%d\n", protection.InaccessibleStatusCode)
+	}
+}
+
+func writeAuditCount(w io.Writer, label string, count model.GitHubAuditCount) {
+	if !count.Accessible || count.Count == 0 {
+		return
+	}
+	fmt.Fprintf(w, "- %s %d\n", label, count.Count)
 }
 
 func modelOperation(command string, args []string, startedAt, finishedAt time.Time, source, root, authMode, authLogin string, includeLocal bool, imported model.GitHubImport, diff ledger.Diff) model.Operation {

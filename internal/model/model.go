@@ -35,6 +35,12 @@ type GitHubAudit struct {
 	IssueTemplates      GitHubAuditPresence       `json:"issue_templates"`
 	PullRequestTemplate GitHubAuditPresence       `json:"pull_request_template"`
 	Codeowners          GitHubAuditPresence       `json:"codeowners"`
+	BranchProtection    GitHubBranchProtection    `json:"branch_protection"`
+	Secrets             GitHubAuditCount          `json:"secrets"`
+	Variables           GitHubAuditCount          `json:"variables"`
+	Environments        GitHubAuditCount          `json:"environments"`
+	Pages               GitHubAuditPresence       `json:"pages"`
+	ReleaseAssets       GitHubReleaseAssets       `json:"release_assets"`
 	Evidence            []GitHubAuditEvidenceItem `json:"evidence,omitempty"`
 }
 
@@ -69,6 +75,27 @@ type GitHubAuditEvidenceItem struct {
 	Type string `json:"type"`
 	Path string `json:"path,omitempty"`
 	Name string `json:"name,omitempty"`
+}
+
+type GitHubBranchProtection struct {
+	Present                bool `json:"present"`
+	RequiredStatusChecks   int  `json:"required_status_checks"`
+	RequiredReviews        bool `json:"required_reviews"`
+	RequiredApprovals      int  `json:"required_approvals,omitempty"`
+	CodeOwnerReviews       bool `json:"code_owner_reviews"`
+	AdminEnforcement       bool `json:"admin_enforcement"`
+	Inaccessible           bool `json:"inaccessible,omitempty"`
+	InaccessibleStatusCode int  `json:"inaccessible_status_code,omitempty"`
+}
+
+type GitHubAuditCount struct {
+	Accessible bool `json:"accessible"`
+	Count      int  `json:"count"`
+}
+
+type GitHubReleaseAssets struct {
+	Releases int `json:"releases"`
+	Assets   int `json:"assets"`
 }
 
 type Ledger struct {

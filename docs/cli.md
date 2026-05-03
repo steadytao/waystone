@@ -40,11 +40,11 @@ waystone github import steadytao/waymark --v --concurrency 8
 waystone github refresh steadytao/waymark
 ```
 
-Audit inspects GitHub dependency surfaces that can make repository migration harder. The first slice reports workflow files, action references, Dependabot, CodeQL, issue templates, pull request templates and CODEOWNERS.
+Audit inspects GitHub dependency surfaces that can make repository migration harder. It reports workflow files, action references, Dependabot, CodeQL, issue templates, pull request templates, CODEOWNERS, default-branch protection, repository secret and variable counts, environment counts, GitHub Pages and release assets.
 
 Audit writes an audit object and operation record to `.waystone/` by default. Use `--no-write` for report-only output.
 
-Audit does not execute workflows or repository code. It does not collect secret values. Use `--verbose` or `-v` to list every action reference; default human output summarises action kinds to avoid noisy reports on large repositories.
+Audit does not execute workflows or repository code. It does not collect secret or variable values. Use `--verbose` or `-v` to list every action reference; default human output summarises action kinds to avoid noisy reports on large repositories.
 
 Import fetches repository metadata, issues, pull requests, comments, labels, milestones, releases and review comments.
 

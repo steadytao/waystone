@@ -122,4 +122,32 @@ type ghRelease struct {
 	HTMLURL     string     `json:"html_url"`
 	CreatedAt   time.Time  `json:"created_at"`
 	PublishedAt *time.Time `json:"published_at"`
+	Assets      []struct {
+		ID   int64  `json:"id"`
+		Name string `json:"name"`
+	} `json:"assets"`
+}
+
+type ghBranchProtection struct {
+	RequiredStatusChecks *struct {
+		Contexts []string `json:"contexts"`
+		Checks   []struct {
+			Context string `json:"context"`
+		} `json:"checks"`
+	} `json:"required_status_checks"`
+	RequiredPullRequestReviews *struct {
+		RequiredApprovingReviewCount int  `json:"required_approving_review_count"`
+		RequireCodeOwnerReviews      bool `json:"require_code_owner_reviews"`
+	} `json:"required_pull_request_reviews"`
+	EnforceAdmins *struct {
+		Enabled bool `json:"enabled"`
+	} `json:"enforce_admins"`
+}
+
+type ghCountEnvelope struct {
+	TotalCount int `json:"total_count"`
+}
+
+type ghPages struct {
+	HTMLURL string `json:"html_url"`
 }

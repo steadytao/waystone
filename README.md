@@ -47,7 +47,7 @@ The current prototype includes:
 - GitHub OAuth device flow login
 - `GITHUB_TOKEN` override support
 - GitHub repository import
-- GitHub exit-readiness audit for workflow and project-metadata surfaces
+- GitHub exit-readiness audit for workflow, policy, release and project-metadata surfaces
 - local ledger storage under `.waystone/`
 - source manifests for imported repositories
 - issue and pull request browsing
