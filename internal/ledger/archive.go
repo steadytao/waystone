@@ -23,6 +23,17 @@ func ExportArchive(root, archivePath string) error {
 	if root == "" {
 		return fmt.Errorf("ledger root must not be empty")
 	}
+	manifest, err := buildArchiveManifest(root)
+	if err != nil {
+		return err
+	}
+	if err := signArchiveManifest(root, &manifest); err != nil {
+		return err
+	}
+	manifestData, err := canonicalJSON(manifest)
+	if err != nil {
+		return err
+	}
 	file, err := os.Create(archivePath) // #nosec G304 -- archive output path is an explicit user-selected destination.
 	if err != nil {
 		return err
@@ -38,22 +49,12 @@ func ExportArchive(root, archivePath string) error {
 	tw := tar.NewWriter(encoder)
 	defer tw.Close()
 
-	return filepath.WalkDir(root, func(filePath string, entry os.DirEntry, err error) error {
+	for _, ref := range manifest.Files {
+		filePath, err := SafeRootedPath(root, ref.Path)
 		if err != nil {
 			return err
 		}
-		if entry.IsDir() {
-			return nil
-		}
-		relative, err := filepath.Rel(root, filePath)
-		if err != nil {
-			return err
-		}
-		name := filepath.ToSlash(relative)
-		if isPrivateIdentityKey(name) {
-			return nil
-		}
-		info, err := entry.Info()
+		info, err := os.Stat(filePath)
 		if err != nil {
 			return err
 		}
@@ -61,7 +62,7 @@ func ExportArchive(root, archivePath string) error {
 		if err != nil {
 			return err
 		}
-		header.Name = name
+		header.Name = ref.Path
 		header.Mode = 0o644
 		if err := tw.WriteHeader(header); err != nil {
 			return err
@@ -70,10 +71,26 @@ func ExportArchive(root, archivePath string) error {
 		if err != nil {
 			return err
 		}
-		defer in.Close()
-		_, err = io.Copy(tw, in)
+		_, copyErr := io.Copy(tw, in)
+		closeErr := in.Close()
+		if copyErr != nil {
+			return copyErr
+		}
+		if closeErr != nil {
+			return closeErr
+		}
+	}
+
+	header := &tar.Header{
+		Name: archiveManifestName,
+		Mode: 0o644,
+		Size: int64(len(manifestData)),
+	}
+	if err := tw.WriteHeader(header); err != nil {
 		return err
-	})
+	}
+	_, err = tw.Write(manifestData)
+	return err
 }
 
 func isPrivateIdentityKey(name string) bool {
@@ -87,9 +104,15 @@ type ArchiveInspection struct {
 	Operations int
 	Strict     bool
 	Checksum   string
+	Manifest   bool
+	Signed     bool
 }
 
 func InspectArchive(archivePath string) (ArchiveInspection, error) {
+	manifest, err := VerifyArchiveManifest(archivePath)
+	if err != nil {
+		return ArchiveInspection{}, err
+	}
 	staging, err := os.MkdirTemp("", "waystone-inspect-*")
 	if err != nil {
 		return ArchiveInspection{}, err
@@ -115,6 +138,8 @@ func InspectArchive(archivePath string) (ArchiveInspection, error) {
 		Operations: operationVerification.Operations,
 		Strict:     strict,
 		Checksum:   verification.Checksum,
+		Manifest:   true,
+		Signed:     manifest.Signature != nil && manifest.Signature.Value != "",
 	}, nil
 }
 
@@ -198,6 +223,9 @@ func ImportArchive(archivePath, root string) error {
 	if err := ensureEmptyOrMissing(root); err != nil {
 		return err
 	}
+	if _, err := VerifyArchiveManifest(archivePath); err != nil {
+		return err
+	}
 
 	parent := filepath.Dir(root)
 	if err := os.MkdirAll(parent, 0o700); err != nil {
@@ -242,6 +270,12 @@ func extractArchive(archivePath, root string) error {
 		}
 		if err != nil {
 			return err
+		}
+		if header.Name == archiveManifestName {
+			if _, err := io.CopyN(io.Discard, tr, header.Size); err != nil {
+				return err
+			}
+			continue
 		}
 		target, err := SafeRootedPath(root, header.Name)
 		if err != nil {

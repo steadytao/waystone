@@ -124,10 +124,29 @@ signing. Invalid signatures are integrity failures.
 
 ```sh
 waystone ledger export --out waystone-ledger
+waystone ledger inspect waystone-ledger
 waystone ledger import waystone-ledger
 ```
 
 The default archive format is a zstd-compressed tar stream. The default file name is extensionless by convention, similar to how Git often treats data format as content rather than suffix.
+
+Archive exports include a non-extracted `WAYSTONE-MANIFEST.json` tar entry.
+
+The archive manifest records:
+- archive format version
+- creation timestamp
+- exported file paths, sizes and SHA-256 hashes
+- included source manifests
+- ledger verification checksum
+- operation count
+- operation-chain head
+- optional Ed25519 signature
+
+The manifest does not list itself. It also does not list private identity key files.
+
+Safe import verifies the archive manifest before extracting ledger contents. A file listed in the manifest must be present and match its recorded size and SHA-256 hash. Extra archive files are rejected.
+
+When a default signing identity exists, archive export signs the archive manifest. The signature covers the logical manifest JSON, not the compressed archive bytes, so compression settings do not affect logical verification.
 
 JSON export is available for inspection and tooling:
 ```sh
@@ -136,7 +155,7 @@ waystone ledger export --format json --out waystone-ledger.json
 
 `--compact` removes formatting from JSON export only. It does not rewrite the ledger.
 
-Safe import verifies archive shape and confirms GitHub sources through authenticated GitHub API access unless `--unsafe` is set.
+Safe import verifies the archive manifest, verifies ledger shape and confirms GitHub sources through authenticated GitHub API access unless `--unsafe` is set.
 
 Import never executes ledger contents.
 

@@ -547,6 +547,8 @@ func runLedgerInspect(args []string, stdout io.Writer) error {
 	writeField(stdout, "Sources", inspection.Sources)
 	writeField(stdout, "Operations", inspection.Operations)
 	writeField(stdout, "Strict", inspection.Strict)
+	writeField(stdout, "Manifest", inspection.Manifest)
+	writeField(stdout, "Signed", inspection.Signed)
 	writeField(stdout, "Checksum", inspection.Checksum)
 	return nil
 }

@@ -12,7 +12,7 @@ Waystone is experimental and should not be treated as a security boundary.
 
 ## Safe Import
 
-Safe archive import verifies the archive as a Waystone ledger and confirms GitHub source repositories through authenticated GitHub API access.
+Safe archive import verifies the archive manifest, verifies the archive as a Waystone ledger and confirms GitHub source repositories through authenticated GitHub API access.
 
 `--unsafe` skips remote source confirmation. It does not permit path traversal or unsupported archive entries.
 
@@ -32,15 +32,15 @@ Strict verification checks operation-chain hashes and recorded file hashes. Sign
 
 ## Signatures
 
-Waystone signs new operation records and source manifests when a default local identity exists.
+Waystone signs new operation records, source manifests and archive manifests when a default local identity exists.
 
 Operation signatures prove that a record was produced by the private key corresponding to the recorded public identity. They do not prove that imported GitHub content was true.
 
 Source manifest signatures prove that a source manifest indexed a specific set of object refs and operation refs. They do not replace per-object hashes.
 
-Unsigned records are reported because early ledgers may predate signing. Invalid signatures fail verification.
+Archive manifest signatures prove that an exported archive manifest was produced by the private key corresponding to the recorded public identity. They cover the logical archive manifest, not the compressed bytes.
 
-Archives are not signed yet.
+Unsigned records are reported because early ledgers may predate signing. Invalid signatures fail verification.
 
 ## Reporting Security Issues
 

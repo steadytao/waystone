@@ -167,9 +167,11 @@ waystone ledger import waystone-ledger --unsafe
 
 Archive export writes a zstd-compressed tar stream by default. Export refuses to write unless strict verification passes.
 
+Archive exports include a `WAYSTONE-MANIFEST.json` tar entry that records exported files, hashes, included sources, operation-chain head and optional archive-manifest signature.
+
 JSON export writes a single inspection bundle. `--compact` removes formatting from that JSON export only; it does not rewrite the ledger.
 
-Safe import verifies archive shape and confirms GitHub sources through authenticated GitHub API access.
+Safe import verifies the archive manifest, archive shape and ledger operation chain, then confirms GitHub sources through authenticated GitHub API access.
 
 `--unsafe` skips remote source confirmation. It does not allow path traversal or unsupported archive entries.
 

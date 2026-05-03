@@ -33,6 +33,7 @@ Current records:
 - [`0009-agent-instructions.md`](0009-agent-instructions.md)
 - [`0010-local-operation-signing.md`](0010-local-operation-signing.md)
 - [`0011-source-manifest-signing.md`](0011-source-manifest-signing.md)
+- [`0012-archive-manifest-signing.md`](0012-archive-manifest-signing.md)
 
 ## Notes
 
