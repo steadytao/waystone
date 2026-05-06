@@ -36,7 +36,7 @@ Before a release, confirm that:
 - `docs/operations.md` matches the operation-chain model
 - `docs/privacy.md` matches token and actor metadata behaviour
 - `docs/security.md` matches the current safety posture
-- `docs/signing.md` reflects signing as planned rather than implemented
+- `docs/signing.md` matches the implemented operation, source manifest, archive manifest and local trust-policy signing behaviour
 - `docs/architecture/decisions/` records current project-boundary decisions
 - `CONTRIBUTORS` matches the reachable non-bot commit history for the release commit
 

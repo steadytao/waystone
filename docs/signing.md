@@ -85,9 +85,9 @@ that imported GitHub content was true.
 
 ## Source Manifests
 
-Source manifests already list object refs and operation refs. A signed source
-manifest should prove that a particular set of objects and operations belonged
-to a source at the time the manifest was written.
+Source manifests list object refs and operation refs. A signed source manifest
+proves that Waystone wrote a particular source manifest containing those object
+and operation refs.
 
 Signing source manifests does not replace per-object hashes. The hashes still
 allow `ledger verify --strict` to detect manual edits to individual files.
@@ -124,7 +124,7 @@ can be considered later.
 
 Unsigned ledgers should remain readable while Waystone is experimental.
 
-Strict verification eventually needs to distinguish:
+Strict verification with signature checks distinguishes:
 - unsigned records
 - valid signatures
 - records signed by unknown keys
