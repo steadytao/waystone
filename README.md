@@ -278,6 +278,7 @@ Start with [docs/README.md](docs/README.md).
 Core documents:
 - [docs/cli.md](docs/cli.md), command reference
 - [docs/examples.md](docs/examples.md), common command workflows
+- [docs/self-import.md](docs/self-import.md), self-import validation flow
 - [docs/ledger-format.md](docs/ledger-format.md), `.waystone/` layout and archive model
 - [docs/operations.md](docs/operations.md), operation records and command history
 - [docs/privacy.md](docs/privacy.md), token and actor metadata handling

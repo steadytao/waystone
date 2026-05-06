@@ -7,6 +7,7 @@ This directory contains the project, architecture, ledger, CLI, security and dev
 - [`../README.md`](../README.md): project summary and current prototype
 - [`cli.md`](cli.md): command reference
 - [`examples.md`](examples.md): common command workflows
+- [`self-import.md`](self-import.md): self-import validation flow
 - [`ledger-format.md`](ledger-format.md): `.waystone/` layout and archive model
 - [`roadmap.md`](roadmap.md): phased development plan
 
