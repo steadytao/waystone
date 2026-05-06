@@ -9,9 +9,6 @@ updates:
       time: "00:00"
       timezone: "Australia/Brisbane"
     open-pull-requests-limit: 3
-    labels:
-      - "dependencies"
-      - "github-actions"
     commit-message:
       prefix: "chore"
       include: "scope"
