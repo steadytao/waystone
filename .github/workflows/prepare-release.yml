@@ -229,7 +229,12 @@ jobs:
 
           output="$("$WAYSTONE_BINARY" --help)"
           assert_contains "$output" "waystone github auth login" "CLI help output"
-          assert_contains "$output" "waystone ledger verify --strict" "CLI help output"
+          assert_contains "$output" "waystone ledger verify [flags]" "CLI help output"
+
+          smoke_ledger="$(mktemp -d)"
+          trap 'rm -rf "$smoke_ledger"' EXIT
+          output="$("$WAYSTONE_BINARY" ledger verify --ledger "$smoke_ledger" --strict)"
+          assert_contains "$output" "Operations" "Ledger verify output"
 
           output="$("$WAYSTONE_BINARY" version)"
           assert_contains "$output" "0.0.0-dev" "Version output"
