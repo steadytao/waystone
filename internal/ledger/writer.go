@@ -138,6 +138,33 @@ func (w Writer) WriteLocalIssueEvent(issue model.Issue, event model.IssueEvent) 
 	return nil
 }
 
+func (w Writer) WriteLocalLabel(label model.Label) error {
+	if w.Root == "" {
+		return fmt.Errorf("ledger root must not be empty")
+	}
+	if label.Source.System != "waystone" {
+		return fmt.Errorf("local labels must use waystone sources")
+	}
+	if label.ID == "" {
+		return fmt.Errorf("label ID must not be empty")
+	}
+	if label.Slug == "" {
+		return fmt.Errorf("label slug must not be empty")
+	}
+	if label.Name == "" {
+		return fmt.Errorf("label name must not be empty")
+	}
+	if err := w.writeLedgerMetadata(); err != nil {
+		return err
+	}
+	for _, target := range localLabelTargets(label) {
+		if err := w.writeTarget(target); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func validateLocalIssueForWrite(root string, issue model.Issue) error {
 	if root == "" {
 		return fmt.Errorf("ledger root must not be empty")
@@ -309,6 +336,30 @@ func localIssueEventTargets(issue model.Issue, event model.IssueEvent) []writeTa
 		value:    event,
 	}
 	return localIssueMutationTargets(manifestSource, issueTarget, eventTarget)
+}
+
+func localLabelTargets(label model.Label) []writeTarget {
+	manifestSource := label.Source
+	embeddedSource := cleanEmbeddedSource(manifestSource)
+	label.Provenance.Source = embeddedSource
+	label.Source = embeddedSource
+	labelTarget := writeTarget{
+		relative: filepath.Join(sourceScopedPath(label.Source), "labels", label.ID+".json"),
+		object:   "label",
+		id:       label.ID,
+		value:    label,
+	}
+	source := manifestSource
+	source.Objects = append([]model.SourceObjectRef(nil), manifestSource.Objects...)
+	source.Operations = append([]model.SourceOperationRef(nil), manifestSource.Operations...)
+	ref, err := sourceObjectRef(labelTarget)
+	if err == nil {
+		source.Objects = upsertSourceObjectRef(source.Objects, ref)
+	}
+	return []writeTarget{
+		{relative: sourceManifestPath(source), object: "source", id: source.System + ":" + source.Owner + "/" + source.Repo, value: source, source: true},
+		labelTarget,
+	}
 }
 
 func localIssueTarget(issue model.Issue) writeTarget {

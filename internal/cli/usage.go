@@ -82,6 +82,8 @@ func printIssueUsage(w io.Writer) {
 	fmt.Fprintln(w, "  waystone issue comment --source owner/repo --issue <number> [flags]")
 	fmt.Fprintln(w, "  waystone issue close --source owner/repo --issue <number> [flags]")
 	fmt.Fprintln(w, "  waystone issue reopen --source owner/repo --issue <number> [flags]")
+	fmt.Fprintln(w, "  waystone issue label add --source owner/repo --issue <number> <label>")
+	fmt.Fprintln(w, "  waystone issue label remove --source owner/repo --issue <number> <label>")
 	fmt.Fprintln(w, "  waystone issue list [--source <source>] [--state open|closed|all]")
 	fmt.Fprintln(w, "  waystone issue search [--source <source>] [--state open|closed|all] [flags] <text>")
 	fmt.Fprintln(w, "  waystone issue show [flags] <number>")
@@ -102,6 +104,7 @@ func printIdentityUsage(w io.Writer) {
 func printLabelUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage:")
 	fmt.Fprintln(w, "  waystone label list [flags]")
+	fmt.Fprintln(w, "  waystone label create --source owner/repo --slug <slug> --name <name> [flags]")
 }
 
 func printMilestoneUsage(w io.Writer) {

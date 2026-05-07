@@ -315,6 +315,58 @@ func (r Reader) SourceLabels(source model.Source) ([]model.Label, error) {
 	return labels, nil
 }
 
+func (r Reader) SourceLabelByID(source model.Source, id string) (model.Label, error) {
+	labels, err := r.SourceLabels(source)
+	if err != nil {
+		return model.Label{}, err
+	}
+	for _, label := range labels {
+		if label.ID == id {
+			return label, nil
+		}
+	}
+	return model.Label{}, fmt.Errorf("label %q not found", id)
+}
+
+func (r Reader) SourceLabelBySlug(source model.Source, slug string) (model.Label, error) {
+	labels, err := r.SourceLabels(source)
+	if err != nil {
+		return model.Label{}, err
+	}
+	for _, label := range labels {
+		if effectiveLabelSlug(label) == slug {
+			return label, nil
+		}
+	}
+	for _, label := range labels {
+		if strings.EqualFold(effectiveLabelSlug(label), slug) {
+			return label, nil
+		}
+	}
+	return model.Label{}, fmt.Errorf("label slug %q not found", slug)
+}
+
+func effectiveLabelSlug(label model.Label) string {
+	if label.Slug != "" {
+		return label.Slug
+	}
+	name := strings.ToLower(strings.TrimSpace(label.Name))
+	var b strings.Builder
+	lastDash := false
+	for _, r := range name {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+			lastDash = false
+			continue
+		}
+		if !lastDash {
+			b.WriteByte('-')
+			lastDash = true
+		}
+	}
+	return strings.Trim(b.String(), "-")
+}
+
 func (r Reader) Milestones() ([]model.Milestone, error) {
 	milestones, err := readObjectTreeJSON[model.Milestone](r.Root, "milestones")
 	if err != nil {

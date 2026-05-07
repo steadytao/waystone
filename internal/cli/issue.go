@@ -34,6 +34,8 @@ func runIssue(args []string, stdout, stderr io.Writer) error {
 		return runIssueStateChange(args[1:], stdout, "close")
 	case "reopen":
 		return runIssueStateChange(args[1:], stdout, "reopen")
+	case "label":
+		return runIssueLabel(args[1:], stdout, stderr)
 	case "list":
 		return runIssueList(args[1:], stdout)
 	case "search":
@@ -48,6 +50,105 @@ func runIssue(args []string, stdout, stderr io.Writer) error {
 		printIssueUsage(stderr)
 		return fmt.Errorf("unknown issue command %q", args[0])
 	}
+}
+
+func runIssueLabel(args []string, stdout, stderr io.Writer) error {
+	if len(args) == 0 {
+		printIssueUsage(stderr)
+		return errors.New("missing issue label command")
+	}
+	switch args[0] {
+	case "add":
+		return runIssueLabelChange(args[1:], stdout, "add")
+	case "remove":
+		return runIssueLabelChange(args[1:], stdout, "remove")
+	default:
+		printIssueUsage(stderr)
+		return fmt.Errorf("unknown issue label command %q", args[0])
+	}
+}
+
+func runIssueLabelChange(args []string, stdout io.Writer, action string) error {
+	fs := flag.NewFlagSet("waystone issue label "+action, flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	root := fs.String("ledger", ".waystone", "Waystone ledger directory")
+	sourceFlag := fs.String("source", "", "source for the local issue, e.g. owner/repo or waystone:owner/repo")
+	issueFlag := fs.Int("issue", 0, "issue number")
+	includeLocal := fs.Bool("local", false, "include local OS user and hostname in operation records")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		return errors.New("usage: waystone issue label " + action + " --source owner/repo --issue <number> <label>")
+	}
+	if strings.TrimSpace(*sourceFlag) == "" {
+		return errors.New("issue label " + action + " requires --source owner/repo")
+	}
+	if *issueFlag <= 0 {
+		return errors.New("issue label " + action + " requires --issue <number>")
+	}
+
+	startedAt := time.Now().UTC()
+	reader := ledger.Reader{Root: *root}
+	source, issue, err := localMutableIssue(reader, *sourceFlag, *issueFlag)
+	if err != nil {
+		return err
+	}
+	label, err := resolveLocalLabel(reader, source, fs.Arg(0))
+	if err != nil {
+		return err
+	}
+	alreadyApplied := stringSliceContains(issue.Labels, label.ID)
+	switch action {
+	case "add":
+		if alreadyApplied {
+			return fmt.Errorf("label %s already applied to issue %d", label.Slug, issue.Number)
+		}
+		issue.Labels = append(issue.Labels, label.ID)
+	case "remove":
+		if !alreadyApplied {
+			return fmt.Errorf("label %s is not applied to issue %d", label.Slug, issue.Number)
+		}
+		issue.Labels = removeString(issue.Labels, label.ID)
+	default:
+		return fmt.Errorf("unsupported issue label action %q", action)
+	}
+	command := "issue label " + action
+	operationID := ledger.NewOperationID(command, startedAt)
+	issue.Source.Operations = append(issue.Source.Operations, sourceOperationRef(operationID, command, startedAt))
+	issue.UpdatedAt = startedAt
+	eventType := "issue.labeled"
+	if action == "remove" {
+		eventType = "issue.unlabeled"
+	}
+	event := localIssueLabelEvent(issue.Source, issue.Number, eventType, label, startedAt)
+	writer := ledger.Writer{Root: *root}
+	diff, err := writer.DiffLocalIssueEvent(issue, event)
+	if err != nil {
+		return err
+	}
+	ledgerExisted := fileExists(filepath.Join(*root, "ledger.json"))
+	if err := writer.WriteLocalIssueEvent(issue, event); err != nil {
+		return err
+	}
+	if err := addLedgerMetadataChange(&diff, *root, ledgerExisted); err != nil {
+		return err
+	}
+	operation := localIssueOperation(operationID, command, args, startedAt, time.Now().UTC(), *root, source, diff, *includeLocal)
+	operation.Output.Summary.Issues = 1
+	if err := writer.WriteOperation(operation); err != nil {
+		return err
+	}
+
+	if action == "add" {
+		fmt.Fprintln(stdout, "Label added")
+	} else {
+		fmt.Fprintln(stdout, "Label removed")
+	}
+	writeIndentedField(stdout, "Source", ledger.SourceSpec(source))
+	writeIndentedField(stdout, "Issue", fmt.Sprintf("#%d", issue.Number))
+	writeIndentedField(stdout, "Label", formatLabel(label))
+	return nil
 }
 
 func runIssueCreate(args []string, stdout io.Writer) error {
@@ -562,6 +663,153 @@ func localIssueEditEvent(source model.Source, issueNumber int, title, body strin
 	return event
 }
 
+func localIssueLabelEvent(source model.Source, issueNumber int, eventType string, label model.Label, createdAt time.Time) model.IssueEvent {
+	event := localIssueEvent(source, issueNumber, eventType, createdAt)
+	event.LabelID = label.ID
+	event.LabelSlug = labelSlug(label)
+	event.LabelName = label.Name
+	return event
+}
+
+func resolveLocalLabel(reader ledger.Reader, source model.Source, value string) (model.Label, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return model.Label{}, errors.New("issue label command requires a label ID or slug")
+	}
+	if label, err := reader.SourceLabelByID(source, value); err == nil {
+		return label, nil
+	}
+	return reader.SourceLabelBySlug(source, value)
+}
+
+func resolveIssueLabelDisplays(reader ledger.Reader, issue model.Issue) []string {
+	if issue.Source.System != "waystone" {
+		return append([]string(nil), issue.Labels...)
+	}
+	var labels []string
+	for _, id := range issue.Labels {
+		label, err := reader.SourceLabelByID(issue.Source, id)
+		if err != nil {
+			labels = append(labels, id+" (missing label)")
+			continue
+		}
+		labels = append(labels, formatLabel(label))
+	}
+	return labels
+}
+
+func formatLabel(label model.Label) string {
+	slug := labelSlug(label)
+	if slug == "" {
+		return label.Name
+	}
+	return fmt.Sprintf("%s (%s)", label.Name, slug)
+}
+
+func labelSlug(label model.Label) string {
+	if label.Slug != "" {
+		return label.Slug
+	}
+	return fallbackLabelSlug(label.Name)
+}
+
+func fallbackLabelSlug(name string) string {
+	name = strings.ToLower(strings.TrimSpace(name))
+	var b strings.Builder
+	lastDash := false
+	for _, r := range name {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+			lastDash = false
+			continue
+		}
+		if !lastDash {
+			b.WriteByte('-')
+			lastDash = true
+		}
+	}
+	return strings.Trim(b.String(), "-")
+}
+
+func searchIssuesWithLabels(reader ledger.Reader, issues []model.Issue, query string, fields []string) []model.Issue {
+	query = strings.ToLower(query)
+	var matches []model.Issue
+	for _, issue := range issues {
+		if strings.Contains(issueSearchableText(reader, issue, fields), query) {
+			matches = append(matches, issue)
+		}
+	}
+	return matches
+}
+
+func matchingIssueFieldWithLabels(reader ledger.Reader, issue model.Issue, query string, fields []string) string {
+	query = strings.ToLower(query)
+	for _, field := range fields {
+		if strings.Contains(issueSearchFieldText(reader, issue, field), query) {
+			if field == "body" {
+				return "description"
+			}
+			return field
+		}
+	}
+	return ""
+}
+
+func issueSearchableText(reader ledger.Reader, issue model.Issue, fields []string) string {
+	var parts []string
+	for _, field := range fields {
+		parts = append(parts, issueSearchFieldText(reader, issue, field))
+	}
+	return strings.Join(parts, "\n")
+}
+
+func issueSearchFieldText(reader ledger.Reader, issue model.Issue, field string) string {
+	if field == "label" || field == "labels" {
+		return strings.Join(issueLabelSearchTerms(reader, issue), " ")
+	}
+	if read, ok := issueSearchFields()[field]; ok {
+		return strings.ToLower(read(issue))
+	}
+	return ""
+}
+
+func issueLabelSearchTerms(reader ledger.Reader, issue model.Issue) []string {
+	terms := append([]string(nil), issue.Labels...)
+	if issue.Source.System != "waystone" {
+		return terms
+	}
+	for _, id := range issue.Labels {
+		label, err := reader.SourceLabelByID(issue.Source, id)
+		if err != nil {
+			continue
+		}
+		terms = append(terms, labelSlug(label), label.Name)
+	}
+	for i := range terms {
+		terms[i] = strings.ToLower(terms[i])
+	}
+	return terms
+}
+
+func stringSliceContains(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
+}
+
+func removeString(values []string, target string) []string {
+	var filtered []string
+	for _, value := range values {
+		if value != target {
+			filtered = append(filtered, value)
+		}
+	}
+	return filtered
+}
+
 func sourceOperationRef(id, command string, startedAt time.Time) model.SourceOperationRef {
 	return model.SourceOperationRef{
 		ID:        id,
@@ -650,7 +898,7 @@ func runIssueShow(args []string, stdout io.Writer) error {
 		writeField(stdout, "Milestone", issue.Milestone)
 	}
 	if len(issue.Labels) > 0 {
-		writeField(stdout, "Labels", strings.Join(issue.Labels, ", "))
+		writeField(stdout, "Labels", strings.Join(resolveIssueLabelDisplays(reader, issue), ", "))
 	}
 	if issue.Body != "" {
 		fmt.Fprintln(stdout)
@@ -794,7 +1042,7 @@ func runIssueSearch(args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	matches := searchIssues(issues, fs.Arg(0), selection)
+	matches := searchIssuesWithLabels(reader, issues, fs.Arg(0), selection)
 	if *jsonOutput {
 		return writeJSONOutput(stdout, matches)
 	}
@@ -806,7 +1054,7 @@ func runIssueSearch(args []string, stdout io.Writer) error {
 		fmt.Fprintf(stdout, "%-28s %-8s %-8s %-12s %s\n", "SOURCE", "NUMBER", "STATE", "MATCH", "TITLE")
 	}
 	for _, issue := range matches {
-		match := matchingIssueField(issue, fs.Arg(0), selection)
+		match := matchingIssueFieldWithLabels(reader, issue, fs.Arg(0), selection)
 		if sourceSet {
 			fmt.Fprintf(stdout, "#%-7d %-8s %-12s %s\n", issue.Number, issue.State, match, issue.Title)
 		} else {

@@ -51,6 +51,12 @@ Create a local Waystone issue beside imported history:
 waystone issue create --source steadytao/waystone --title "Follow up on imported history"
 ```
 
+Create and apply a local label:
+```sh
+waystone label create --source steadytao/waystone --slug migration --name "Migration"
+waystone issue label add --source steadytao/waystone --issue 1 migration
+```
+
 Edit a local Waystone issue:
 ```sh
 waystone issue edit --source steadytao/waystone --issue 1 --title "Follow up on preserved history"

@@ -179,19 +179,6 @@ func normalizeSearchFields[T any](fields []string, allowed map[string]func(T) st
 	return normalized, nil
 }
 
-func searchIssues(issues []model.Issue, query string, fields []string) []model.Issue {
-	query = strings.ToLower(query)
-	searchable := issueSearchFields()
-	var matches []model.Issue
-	for _, issue := range issues {
-		text := searchableText(issue, fields, searchable)
-		if strings.Contains(text, query) {
-			matches = append(matches, issue)
-		}
-	}
-	return matches
-}
-
 func searchPullRequests(prs []model.PullRequest, query string, fields []string) []model.PullRequest {
 	query = strings.ToLower(query)
 	searchable := pullRequestSearchFields()
@@ -203,10 +190,6 @@ func searchPullRequests(prs []model.PullRequest, query string, fields []string) 
 		}
 	}
 	return matches
-}
-
-func matchingIssueField(issue model.Issue, query string, fields []string) string {
-	return matchingField(issue, query, fields, issueSearchFields())
 }
 
 func matchingPullRequestField(pr model.PullRequest, query string, fields []string) string {

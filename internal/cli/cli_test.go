@@ -1535,6 +1535,197 @@ func TestLabelListSourceFilter(t *testing.T) {
 	}
 }
 
+func TestLabelCreateCommandCreatesLocalLabel(t *testing.T) {
+	root := t.TempDir()
+	var stdout, stderr bytes.Buffer
+
+	if err := Run(context.Background(), []string{"label", "create", "--ledger", root, "--source", "steadytao/waystone", "--slug", "bug", "--name", "Software Issue", "--color", "d73a4a", "--description", "Something broken"}, &stdout, &stderr); err != nil {
+		t.Fatalf("label create returned error: %v", err)
+	}
+	for _, want := range []string{"Label created", "Source           waystone:steadytao/waystone", "ID               lbl_", "Slug             bug", "Name             Software Issue"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+		}
+	}
+	labels, err := (ledger.Reader{Root: root}).SourceLabels(model.Source{System: "waystone", Owner: "steadytao", Repo: "waystone"})
+	if err != nil {
+		t.Fatalf("SourceLabels returned error: %v", err)
+	}
+	if len(labels) != 1 || labels[0].Slug != "bug" || labels[0].Name != "Software Issue" || labels[0].ID == "bug" {
+		t.Fatalf("labels = %#v, want local label with opaque ID", labels)
+	}
+	if _, err := (ledger.Reader{Root: root}).VerifyOperations(); err != nil {
+		t.Fatalf("VerifyOperations returned error: %v", err)
+	}
+}
+
+func TestLabelCreateCommandDefaultsBareSourceToWaystone(t *testing.T) {
+	root := t.TempDir()
+	if err := Run(context.Background(), []string{"label", "create", "--ledger", root, "--source", "steadytao/waystone", "--slug", "bug", "--name", "Bug"}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("label create returned error: %v", err)
+	}
+	if _, err := (ledger.Reader{Root: root}).Source(model.Source{System: "waystone", Owner: "steadytao", Repo: "waystone"}); err != nil {
+		t.Fatalf("Source returned error for waystone shorthand: %v", err)
+	}
+}
+
+func TestLabelCreateCommandRefusesImportedSources(t *testing.T) {
+	root := writeTestLedger(t)
+	err := Run(context.Background(), []string{"label", "create", "--ledger", root, "--source", "github:example/project", "--slug", "bug", "--name", "Bug"}, io.Discard, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "only supports waystone sources") {
+		t.Fatalf("label create error = %v, want imported source refusal", err)
+	}
+}
+
+func TestLabelCreateCommandRejectsDuplicateSlug(t *testing.T) {
+	root := t.TempDir()
+	command := []string{"label", "create", "--ledger", root, "--source", "steadytao/waystone", "--slug", "bug", "--name", "Bug"}
+	if err := Run(context.Background(), command, io.Discard, io.Discard); err != nil {
+		t.Fatalf("first label create returned error: %v", err)
+	}
+	err := Run(context.Background(), command, io.Discard, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "label slug already exists") {
+		t.Fatalf("second label create error = %v, want duplicate slug error", err)
+	}
+}
+
+func TestLabelCreateCommandRejectsInvalidColor(t *testing.T) {
+	root := t.TempDir()
+	err := Run(context.Background(), []string{"label", "create", "--ledger", root, "--source", "steadytao/waystone", "--slug", "bug", "--name", "Bug", "--color", "pink"}, io.Discard, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "six hex") {
+		t.Fatalf("label create error = %v, want invalid colour error", err)
+	}
+}
+
+func TestIssueLabelAddCommandUpdatesLocalIssue(t *testing.T) {
+	root := t.TempDir()
+	createLocalIssueAndLabel(t, root)
+	var stdout, stderr bytes.Buffer
+
+	if err := Run(context.Background(), []string{"issue", "label", "add", "--ledger", root, "--source", "steadytao/waystone", "--issue", "1", "bug"}, &stdout, &stderr); err != nil {
+		t.Fatalf("issue label add returned error: %v", err)
+	}
+	for _, want := range []string{"Label added", "Issue            #1", "Label            Software Issue (bug)"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+		}
+	}
+	issue, err := (ledger.Reader{Root: root}).SourceIssue(model.Source{System: "waystone", Owner: "steadytao", Repo: "waystone"}, 1)
+	if err != nil {
+		t.Fatalf("SourceIssue returned error: %v", err)
+	}
+	if len(issue.Labels) != 1 || !strings.HasPrefix(issue.Labels[0], "lbl_") {
+		t.Fatalf("issue labels = %#v, want label ID", issue.Labels)
+	}
+	if _, err := (ledger.Reader{Root: root}).VerifyOperations(); err != nil {
+		t.Fatalf("VerifyOperations returned error: %v", err)
+	}
+}
+
+func TestIssueLabelAddCommandRefusesImportedSources(t *testing.T) {
+	root := writeTestLedger(t)
+	err := Run(context.Background(), []string{"issue", "label", "add", "--ledger", root, "--source", "github:example/project", "--issue", "1", "bug"}, io.Discard, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "only supports waystone sources") {
+		t.Fatalf("issue label add error = %v, want imported source refusal", err)
+	}
+}
+
+func TestIssueLabelAddCommandRejectsDuplicateApplication(t *testing.T) {
+	root := t.TempDir()
+	createLocalIssueAndLabel(t, root)
+	command := []string{"issue", "label", "add", "--ledger", root, "--source", "steadytao/waystone", "--issue", "1", "bug"}
+	if err := Run(context.Background(), command, io.Discard, io.Discard); err != nil {
+		t.Fatalf("first issue label add returned error: %v", err)
+	}
+	err := Run(context.Background(), command, io.Discard, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "already applied") {
+		t.Fatalf("second issue label add error = %v, want duplicate application error", err)
+	}
+}
+
+func TestIssueLabelRemoveCommandUpdatesLocalIssue(t *testing.T) {
+	root := t.TempDir()
+	createLocalIssueAndLabel(t, root)
+	if err := Run(context.Background(), []string{"issue", "label", "add", "--ledger", root, "--source", "steadytao/waystone", "--issue", "1", "bug"}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("issue label add returned error: %v", err)
+	}
+	var stdout, stderr bytes.Buffer
+	if err := Run(context.Background(), []string{"issue", "label", "remove", "--ledger", root, "--source", "steadytao/waystone", "--issue", "1", "bug"}, &stdout, &stderr); err != nil {
+		t.Fatalf("issue label remove returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Label removed") || !strings.Contains(stdout.String(), "Software Issue (bug)") {
+		t.Fatalf("stdout = %q, want removed label output", stdout.String())
+	}
+	issue, err := (ledger.Reader{Root: root}).SourceIssue(model.Source{System: "waystone", Owner: "steadytao", Repo: "waystone"}, 1)
+	if err != nil {
+		t.Fatalf("SourceIssue returned error: %v", err)
+	}
+	if len(issue.Labels) != 0 {
+		t.Fatalf("issue labels = %#v, want label removed", issue.Labels)
+	}
+}
+
+func TestIssueLabelRemoveCommandRejectsMissingLabel(t *testing.T) {
+	root := t.TempDir()
+	createLocalIssueAndLabel(t, root)
+	err := Run(context.Background(), []string{"issue", "label", "remove", "--ledger", root, "--source", "steadytao/waystone", "--issue", "1", "bug"}, io.Discard, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "not applied") {
+		t.Fatalf("issue label remove error = %v, want missing label error", err)
+	}
+}
+
+func TestIssueTimelineIncludesLabelEvents(t *testing.T) {
+	root := t.TempDir()
+	createLocalIssueAndLabel(t, root)
+	if err := Run(context.Background(), []string{"issue", "label", "add", "--ledger", root, "--source", "steadytao/waystone", "--issue", "1", "bug"}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("issue label add returned error: %v", err)
+	}
+	if err := Run(context.Background(), []string{"issue", "label", "remove", "--ledger", root, "--source", "steadytao/waystone", "--issue", "1", "bug"}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("issue label remove returned error: %v", err)
+	}
+	var stdout, stderr bytes.Buffer
+	if err := Run(context.Background(), []string{"issue", "timeline", "--ledger", root, "--source", "waystone:steadytao/waystone", "1"}, &stdout, &stderr); err != nil {
+		t.Fatalf("issue timeline returned error: %v", err)
+	}
+	for _, want := range []string{"issue.labeled", "issue.unlabeled", "Label            Software Issue (bug)"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+		}
+	}
+}
+
+func TestIssueShowResolvesLocalLabelNames(t *testing.T) {
+	root := t.TempDir()
+	createLocalIssueAndLabel(t, root)
+	if err := Run(context.Background(), []string{"issue", "label", "add", "--ledger", root, "--source", "steadytao/waystone", "--issue", "1", "bug"}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("issue label add returned error: %v", err)
+	}
+	var stdout, stderr bytes.Buffer
+	if err := Run(context.Background(), []string{"issue", "show", "--ledger", root, "--source", "waystone:steadytao/waystone", "1"}, &stdout, &stderr); err != nil {
+		t.Fatalf("issue show returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Labels         Software Issue (bug)") {
+		t.Fatalf("stdout = %q, want resolved label display", stdout.String())
+	}
+}
+
+func TestIssueSearchMatchesLocalLabelSlugAndName(t *testing.T) {
+	root := t.TempDir()
+	createLocalIssueAndLabel(t, root)
+	if err := Run(context.Background(), []string{"issue", "label", "add", "--ledger", root, "--source", "steadytao/waystone", "--issue", "1", "bug"}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("issue label add returned error: %v", err)
+	}
+	for _, query := range []string{"bug", "Software"} {
+		var stdout, stderr bytes.Buffer
+		if err := Run(context.Background(), []string{"issue", "search", "--ledger", root, "--source", "waystone:steadytao/waystone", "--field", "label", query}, &stdout, &stderr); err != nil {
+			t.Fatalf("issue search returned error: %v", err)
+		}
+		if !strings.Contains(stdout.String(), "Issues         1") {
+			t.Fatalf("stdout = %q, want label match for %q", stdout.String(), query)
+		}
+	}
+}
+
 func TestMilestoneListCommand(t *testing.T) {
 	root := writeTestLedger(t)
 	var stdout, stderr bytes.Buffer
@@ -1628,6 +1819,16 @@ func TestModelOperationUsesRemoteLoginAndOmitsLocalMachineByDefault(t *testing.T
 
 func githubProgress(detail bool, message string) github.Progress {
 	return github.Progress{Detail: detail, Message: message}
+}
+
+func createLocalIssueAndLabel(t *testing.T, root string) {
+	t.Helper()
+	if err := Run(context.Background(), []string{"issue", "create", "--ledger", root, "--source", "steadytao/waystone", "--title", "Labelled issue"}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("issue create returned error: %v", err)
+	}
+	if err := Run(context.Background(), []string{"label", "create", "--ledger", root, "--source", "steadytao/waystone", "--slug", "bug", "--name", "Software Issue", "--color", "d73a4a"}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("label create returned error: %v", err)
+	}
 }
 
 func writeTestLedger(t *testing.T) string {

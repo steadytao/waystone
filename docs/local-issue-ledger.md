@@ -6,7 +6,7 @@ Waystone has two different source categories:
 
 Imported forge sources are read-only evidence. Waystone should preserve them, verify them and export them, but it should not mutate them locally.
 
-Local Waystone sources are appendable local records. They are used for issues, comments and lifecycle events authored directly into the ledger.
+Local Waystone sources are appendable local records. They are used for issues, labels, comments and lifecycle events authored directly into the ledger.
 
 ## Creating A Local Issue
 
@@ -26,6 +26,32 @@ Waystone refuses imported sources:
 ```sh
 waystone issue create --source github:owner/repo --title "This will fail"
 ```
+
+## Labels
+
+Create a local label:
+```sh
+waystone label create --source owner/repo --slug migration --name "Migration" --color 0e8a16
+```
+
+Apply it to an issue:
+```sh
+waystone issue label add --source owner/repo --issue 1 migration
+```
+
+Remove it from an issue:
+```sh
+waystone issue label remove --source owner/repo --issue 1 migration
+```
+
+Local labels have immutable IDs, stable slugs and mutable display names. Issue JSON stores label IDs. Human-readable issue and timeline output resolves those IDs into labels such as `Migration (migration)`.
+
+Local labels are stored under:
+```text
+.waystone/objects/waystone/<owner>/<repo>/labels/
+```
+
+Label add/remove history is stored as `issue.labeled` and `issue.unlabeled` events.
 
 ## Comments
 
@@ -81,6 +107,8 @@ waystone issue timeline --source waystone:owner/repo 1
 A local issue timeline can include:
 - `issue.opened`
 - `issue.edited`
+- `issue.labeled`
+- `issue.unlabeled`
 - `issue.comment`
 - `issue.closed`
 - `issue.reopened`

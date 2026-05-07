@@ -298,3 +298,66 @@ func TestWriteGitHubImportPreservesLabelsWithCollidingSlugs(t *testing.T) {
 		}
 	}
 }
+
+func TestWriterWritesLocalLabelByID(t *testing.T) {
+	root := t.TempDir()
+	writer := Writer{Root: root}
+	source := model.Source{System: "waystone", Owner: "example", Repo: "project"}
+	label := model.Label{
+		Provenance:  model.Provenance{ImportID: "waystone:example/project", Source: source},
+		ID:          "lbl_test",
+		Slug:        "bug",
+		Name:        "Software Issue",
+		Color:       "d73a4a",
+		Description: "Something broken",
+		CreatedAt:   time.Date(2026, 5, 7, 0, 0, 0, 0, time.UTC),
+		UpdatedAt:   time.Date(2026, 5, 7, 0, 0, 0, 0, time.UTC),
+	}
+
+	if err := writer.WriteLocalLabel(label); err != nil {
+		t.Fatalf("WriteLocalLabel returned error: %v", err)
+	}
+
+	path := filepath.Join(root, "objects", "waystone", "example", "project", "labels", "lbl_test.json")
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("expected label to be written by ID: %v", err)
+	}
+	sourceManifest, err := (Reader{Root: root}).Source(source)
+	if err != nil {
+		t.Fatalf("Source returned error: %v", err)
+	}
+	if len(sourceManifest.Objects) != 1 || sourceManifest.Objects[0].Object != "label" || sourceManifest.Objects[0].ID != "lbl_test" {
+		t.Fatalf("source objects = %#v, want label ref", sourceManifest.Objects)
+	}
+}
+
+func TestReaderFindsLocalLabelBySlug(t *testing.T) {
+	root := t.TempDir()
+	source := model.Source{System: "waystone", Owner: "example", Repo: "project"}
+	label := model.Label{
+		Provenance: model.Provenance{ImportID: "waystone:example/project", Source: source},
+		ID:         "lbl_test",
+		Slug:       "bug",
+		Name:       "Software Issue",
+		CreatedAt:  time.Date(2026, 5, 7, 0, 0, 0, 0, time.UTC),
+		UpdatedAt:  time.Date(2026, 5, 7, 0, 0, 0, 0, time.UTC),
+	}
+	if err := (Writer{Root: root}).WriteLocalLabel(label); err != nil {
+		t.Fatalf("WriteLocalLabel returned error: %v", err)
+	}
+
+	byID, err := (Reader{Root: root}).SourceLabelByID(source, "lbl_test")
+	if err != nil {
+		t.Fatalf("SourceLabelByID returned error: %v", err)
+	}
+	if byID.Name != "Software Issue" {
+		t.Fatalf("label by ID = %#v", byID)
+	}
+	bySlug, err := (Reader{Root: root}).SourceLabelBySlug(source, "BUG")
+	if err != nil {
+		t.Fatalf("SourceLabelBySlug returned error: %v", err)
+	}
+	if bySlug.ID != "lbl_test" {
+		t.Fatalf("label by slug = %#v", bySlug)
+	}
+}

@@ -102,6 +102,10 @@ func (w Writer) DiffLocalIssueEvent(issue model.Issue, event model.IssueEvent) (
 	return w.diffTargets(localIssueEventTargets(issue, event))
 }
 
+func (w Writer) DiffLocalLabel(label model.Label) (Diff, error) {
+	return w.diffTargets(localLabelTargets(label))
+}
+
 func (w Writer) diffTargets(targets []writeTarget) (Diff, error) {
 	var diff Diff
 	for _, target := range targets {

@@ -37,6 +37,7 @@ Issue search can also filter by current issue state with `--state open`, `--stat
 Use `--field` to search specific fields.
 ```sh
 waystone issue search --field label Tracking
+waystone issue search --field label migration
 waystone issue search --field milestone "v1.0.0"
 waystone issue search --field author steadytao
 waystone pr search --field branch master
@@ -59,7 +60,7 @@ Supported issue fields:
 - `description` or `body`
 - `author`
 - `state`
-- `label` or `labels`
+- `label` or `labels`, including local label IDs, slugs and display names
 - `milestone`
 - `url`
 - `all`
