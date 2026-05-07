@@ -190,6 +190,9 @@ Safe import verifies the archive manifest, archive shape and ledger operation ch
 waystone issue create --source steadytao/waystone --title "Example issue"
 waystone issue create --source waystone:steadytao/waystone --title "Example issue"
 waystone issue create --source waystone:steadytao/waystone --title "Example issue" --body-file issue.md
+waystone issue edit --source steadytao/waystone --issue 1 --title "Updated issue"
+waystone issue edit --source steadytao/waystone --issue 1 --body "Updated body"
+waystone issue edit --source steadytao/waystone --issue 1 --body-file issue.md
 waystone issue comment --source steadytao/waystone --issue 1 --body "Example comment"
 waystone issue comment --source steadytao/waystone --issue 1 --body-file comment.md
 waystone issue close --source steadytao/waystone --issue 1
@@ -205,17 +208,17 @@ waystone issue comments 15
 waystone issue timeline 15
 ```
 
-`issue create`, `issue comment`, `issue close` and `issue reopen` write local issue records under a `waystone:` source. Because they only write local Waystone records, bare `owner/repo` source names are treated as `waystone:owner/repo`.
+`issue create`, `issue edit`, `issue comment`, `issue close` and `issue reopen` write local issue records under a `waystone:` source. Because they only write local Waystone records, bare `owner/repo` source names are treated as `waystone:owner/repo`.
 
 These commands refuse imported sources such as `github:owner/repo`.
 
-The first local lifecycle path is intentionally narrow. It does not edit issues, assign labels, sync with a forge or publish the issue remotely.
+The first local lifecycle path is intentionally narrow. It supports title/body edits only. It does not assign labels, sync with a forge or publish the issue remotely.
 
 Unfiltered lists include a source column. Detail commands require `--source` when the same issue number exists in multiple imported repositories.
 
 `issue search` searches title and description/body by default. Use repeated `--field` flags or comma-separated values to search `title`, `description`, `author`, `state`, `label`, `milestone`, `url` or `all`.
 
-`issue timeline` combines the issue, comments and close or reopen events chronologically.
+`issue timeline` combines the issue, edits, comments and close or reopen events chronologically.
 
 ## Pull Requests
 
