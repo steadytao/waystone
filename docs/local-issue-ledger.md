@@ -29,6 +29,14 @@ waystone issue create --source github:owner/repo --title "This will fail"
 
 ## Comments
 
+Edit an issue title or body:
+```sh
+waystone issue edit --source owner/repo --issue 1 --title "Updated title"
+waystone issue edit --source owner/repo --issue 1 --body-file issue.md
+```
+
+The issue JSON stores the current title and body. Edit history is recorded as `issue.edited` events. Edit events record the new title or body, not a previous-content snapshot.
+
 Add a comment:
 ```sh
 waystone issue comment --source owner/repo --issue 1 --body "I checked this locally."
@@ -72,6 +80,7 @@ waystone issue timeline --source waystone:owner/repo 1
 
 A local issue timeline can include:
 - `issue.opened`
+- `issue.edited`
 - `issue.comment`
 - `issue.closed`
 - `issue.reopened`

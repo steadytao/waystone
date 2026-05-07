@@ -72,13 +72,19 @@ type timelineEvent struct {
 }
 
 func issueTimeline(issue model.Issue, comments []model.Comment, issueEvents []model.IssueEvent) []timelineEvent {
+	openedTitle := issue.Title
+	openedBody := issue.Body
+	if issue.Source.System == "waystone" && hasTimelineEvent(issueEvents, "issue.edited") {
+		openedTitle = ""
+		openedBody = ""
+	}
 	events := []timelineEvent{
 		{
 			Time:   issue.CreatedAt,
 			Type:   "issue.opened",
 			Author: issue.Author.Login,
-			Title:  issue.Title,
-			Body:   issue.Body,
+			Title:  openedTitle,
+			Body:   openedBody,
 			URL:    issue.OriginalURL,
 		},
 	}
@@ -96,6 +102,8 @@ func issueTimeline(issue model.Issue, comments []model.Comment, issueEvents []mo
 			Time:   event.CreatedAt,
 			Type:   event.Type,
 			Author: event.Author.Login,
+			Title:  event.Title,
+			Body:   event.Body,
 		})
 	}
 	if !issue.ClosedAt.IsZero() && !hasTimelineEvent(issueEvents, "issue.closed") {

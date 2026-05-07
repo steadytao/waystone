@@ -1009,9 +1009,97 @@ func TestIssueLifecycleCommandsUpdateLocalStateAndTimeline(t *testing.T) {
 	}
 }
 
+func TestIssueEditCommandUpdatesLocalIssue(t *testing.T) {
+	root := t.TempDir()
+	source := model.Source{System: "waystone", Owner: "steadytao", Repo: "waystone"}
+	if err := Run(context.Background(), []string{"issue", "create", "--ledger", root, "--source", "steadytao/waystone", "--title", "Old title", "--body", "Old body"}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("issue create returned error: %v", err)
+	}
+
+	var out bytes.Buffer
+	if err := Run(context.Background(), []string{"issue", "edit", "--ledger", root, "--source", "steadytao/waystone", "--issue", "1", "--title", "New title", "--body", "New body"}, &out, io.Discard); err != nil {
+		t.Fatalf("issue edit returned error: %v", err)
+	}
+	for _, want := range []string{"Issue edited", "Source           waystone:steadytao/waystone", "Issue            #1"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("stdout = %q, want %q", out.String(), want)
+		}
+	}
+
+	issue, err := (ledger.Reader{Root: root}).SourceIssue(source, 1)
+	if err != nil {
+		t.Fatalf("SourceIssue returned error: %v", err)
+	}
+	if issue.Title != "New title" || issue.Body != "New body" {
+		t.Fatalf("issue = %#v, want edited title and body", issue)
+	}
+	if !issue.UpdatedAt.After(issue.CreatedAt) && !issue.UpdatedAt.Equal(issue.CreatedAt) {
+		t.Fatalf("issue updated_at = %s created_at = %s", issue.UpdatedAt, issue.CreatedAt)
+	}
+	manifest, err := (ledger.Reader{Root: root}).Source(source)
+	if err != nil {
+		t.Fatalf("Source returned error: %v", err)
+	}
+	if len(manifest.Operations) != 2 {
+		t.Fatalf("source operations = %#v, want 2 operations", manifest.Operations)
+	}
+	if !sourceManifestHasObject(manifest, "issue_event") {
+		t.Fatalf("source objects = %#v, want issue edit event ref", manifest.Objects)
+	}
+
+	var timeline bytes.Buffer
+	if err := Run(context.Background(), []string{"issue", "timeline", "--ledger", root, "--source", "waystone:steadytao/waystone", "1"}, &timeline, io.Discard); err != nil {
+		t.Fatalf("issue timeline returned error: %v", err)
+	}
+	for _, want := range []string{"issue.opened", "issue.edited", "New title"} {
+		if !strings.Contains(timeline.String(), want) {
+			t.Fatalf("timeline = %q, want %q", timeline.String(), want)
+		}
+	}
+	if _, err := (ledger.Reader{Root: root}).VerifyOperations(); err != nil {
+		t.Fatalf("VerifyOperations returned error: %v", err)
+	}
+}
+
+func TestIssueEditCommandReadsBodyFile(t *testing.T) {
+	root := t.TempDir()
+	bodyFile := filepath.Join(t.TempDir(), "issue.md")
+	if err := os.WriteFile(bodyFile, []byte("Edited body\n"), 0o600); err != nil {
+		t.Fatalf("write body file: %v", err)
+	}
+	if err := Run(context.Background(), []string{"issue", "create", "--ledger", root, "--source", "steadytao/waystone", "--title", "Title", "--body", "Old body"}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("issue create returned error: %v", err)
+	}
+	if err := Run(context.Background(), []string{"issue", "edit", "--ledger", root, "--source", "steadytao/waystone", "--issue", "1", "--body-file", bodyFile}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("issue edit returned error: %v", err)
+	}
+	issue, err := (ledger.Reader{Root: root}).SourceIssue(model.Source{System: "waystone", Owner: "steadytao", Repo: "waystone"}, 1)
+	if err != nil {
+		t.Fatalf("SourceIssue returned error: %v", err)
+	}
+	if issue.Title != "Title" || issue.Body != "Edited body\n" {
+		t.Fatalf("issue = %#v, want body-file update only", issue)
+	}
+}
+
+func TestIssueEditCommandRequiresChange(t *testing.T) {
+	root := t.TempDir()
+	if err := Run(context.Background(), []string{"issue", "create", "--ledger", root, "--source", "steadytao/waystone", "--title", "Title"}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("issue create returned error: %v", err)
+	}
+	err := Run(context.Background(), []string{"issue", "edit", "--ledger", root, "--source", "steadytao/waystone", "--issue", "1"}, io.Discard, io.Discard)
+	if err == nil {
+		t.Fatal("Run returned nil error")
+	}
+	if !strings.Contains(err.Error(), "requires --title, --body or --body-file") {
+		t.Fatalf("error = %q", err)
+	}
+}
+
 func TestIssueLifecycleCommandsRefuseImportedSources(t *testing.T) {
 	root := t.TempDir()
 	for _, command := range [][]string{
+		{"issue", "edit", "--ledger", root, "--source", "github:steadytao/waystone", "--issue", "1", "--title", "Bad"},
 		{"issue", "comment", "--ledger", root, "--source", "github:steadytao/waystone", "--issue", "1", "--body", "Bad"},
 		{"issue", "close", "--ledger", root, "--source", "github:steadytao/waystone", "--issue", "1"},
 		{"issue", "reopen", "--ledger", root, "--source", "github:steadytao/waystone", "--issue", "1"},

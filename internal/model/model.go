@@ -201,6 +201,8 @@ type IssueEvent struct {
 	IssueNumber int       `json:"issue_number"`
 	Type        string    `json:"type"`
 	Author      Author    `json:"author"`
+	Title       string    `json:"title,omitempty"`
+	Body        string    `json:"body,omitempty"`
 	CreatedAt   time.Time `json:"created_at"`
 }
 

@@ -53,7 +53,7 @@ The current prototype includes:
 - issue and pull request browsing
 - comment and timeline views
 - label and milestone listing
-- local issue creation, comments, close and reopen under `waystone:` sources
+- local issue creation, editing, comments, close and reopen under `waystone:` sources
 - local issue and pull request search
 - operation records for ledger-changing and verification commands
 - object hashes and strict ledger verification
@@ -136,6 +136,7 @@ Browse imported records:
 ```bash
 waystone issue list
 waystone issue create --source steadytao/waystone --title "Example local issue"
+waystone issue edit --source steadytao/waystone --issue 1 --title "Updated local issue"
 waystone issue comment --source steadytao/waystone --issue 1 --body "Example comment"
 waystone issue close --source steadytao/waystone --issue 1
 waystone issue reopen --source steadytao/waystone --issue 1
@@ -184,6 +185,7 @@ waystone source status
 
 waystone issue list
 waystone issue create --source owner/repo --title <title>
+waystone issue edit --source owner/repo --issue <number>
 waystone issue comment --source owner/repo --issue <number>
 waystone issue close --source owner/repo --issue <number>
 waystone issue reopen --source owner/repo --issue <number>

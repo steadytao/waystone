@@ -14,15 +14,16 @@ An issue object without comments or state transitions is not enough to prove a u
 
 ## Decision
 
-Waystone will support local issue comments, close and reopen operations for `waystone:` sources.
+Waystone will support local issue edits, comments, close and reopen operations for `waystone:` sources.
 
 Imported sources such as `github:<owner>/<repo>` remain read-only evidence from the source forge.
 
 The first lifecycle implementation will support:
 - `waystone issue comment --source owner/repo --issue <number>`
+- `waystone issue edit --source owner/repo --issue <number>`
 - `waystone issue close --source owner/repo --issue <number>`
 - `waystone issue reopen --source owner/repo --issue <number>`
-- timeline rendering for local comments and local close or reopen events
+- timeline rendering for local edits, comments and close or reopen events
 
 Bare `owner/repo` source names remain shorthand for `waystone:owner/repo` only for local-only authoring commands.
 
@@ -30,14 +31,14 @@ Local comments are stored as deterministic JSON under `.waystone/objects/wayston
 
 Local close and reopen history is stored as deterministic issue event JSON under `.waystone/objects/waystone/<owner>/<repo>/events/`.
 
-The issue object remains the current-state record. Issue event records preserve lifecycle history that would otherwise be lost when an issue is reopened.
+The issue object remains the current-state record. Issue event records preserve lifecycle history that would otherwise be lost when an issue is edited or reopened.
 
 ## Consequences
 
-Waystone gains the first complete local issue lifecycle: create, discuss, close and reopen.
+Waystone gains the first complete local issue lifecycle: create, edit, discuss, close and reopen.
 
 The source manifest records local issue, comment and issue-event object hashes. Each lifecycle command writes an operation record and is signed when a local identity exists.
 
 This keeps local history inspectable and exportable without implying remote sync or forge mutation.
 
-The implementation still does not support issue edits, labels, milestones, assignment, remote publishing, conflict handling or append-only event projection for every issue field.
+The implementation still does not support labels, milestones, assignment, remote publishing, conflict handling or append-only event projection for every issue field.

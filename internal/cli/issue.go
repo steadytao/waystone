@@ -26,6 +26,8 @@ func runIssue(args []string, stdout, stderr io.Writer) error {
 	switch args[0] {
 	case "create":
 		return runIssueCreate(args[1:], stdout)
+	case "edit":
+		return runIssueEdit(args[1:], stdout)
 	case "comment":
 		return runIssueComment(args[1:], stdout)
 	case "close":
@@ -145,6 +147,88 @@ func runIssueCreate(args []string, stdout io.Writer) error {
 	writeIndentedField(stdout, "Source", ledger.SourceSpec(source))
 	writeIndentedField(stdout, "Number", fmt.Sprintf("#%d", issue.Number))
 	writeIndentedField(stdout, "Title", issue.Title)
+	return nil
+}
+
+func runIssueEdit(args []string, stdout io.Writer) error {
+	fs := flag.NewFlagSet("waystone issue edit", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	root := fs.String("ledger", ".waystone", "Waystone ledger directory")
+	sourceFlag := fs.String("source", "", "source for the local issue, e.g. owner/repo or waystone:owner/repo")
+	issueFlag := fs.Int("issue", 0, "issue number")
+	title := fs.String("title", "", "issue title")
+	body := fs.String("body", "", "issue body")
+	bodyFile := fs.String("body-file", "", "file containing issue body")
+	includeLocal := fs.Bool("local", false, "include local OS user and hostname in operation records")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return errors.New("usage: waystone issue edit --source owner/repo --issue <number> [--title <title>] [--body <body> | --body-file <path>]")
+	}
+	if strings.TrimSpace(*sourceFlag) == "" {
+		return errors.New("issue edit requires --source owner/repo")
+	}
+	if *issueFlag <= 0 {
+		return errors.New("issue edit requires --issue <number>")
+	}
+	titleSet := flagPassed(args, "--title")
+	bodySet := flagPassed(args, "--body")
+	bodyFileSet := flagPassed(args, "--body-file")
+	if !titleSet && !bodySet && !bodyFileSet {
+		return errors.New("issue edit requires --title, --body or --body-file")
+	}
+	if bodySet && bodyFileSet {
+		return errors.New("use --body or --body-file, not both")
+	}
+	if titleSet && strings.TrimSpace(*title) == "" {
+		return errors.New("issue edit requires non-empty --title")
+	}
+
+	startedAt := time.Now().UTC()
+	reader := ledger.Reader{Root: *root}
+	source, issue, err := localMutableIssue(reader, *sourceFlag, *issueFlag)
+	if err != nil {
+		return err
+	}
+	if titleSet {
+		issue.Title = *title
+	}
+	if bodyFileSet {
+		data, err := os.ReadFile(*bodyFile) // #nosec G304 -- body-file is an explicit user-provided input path.
+		if err != nil {
+			return err
+		}
+		issue.Body = string(data)
+	} else if bodySet {
+		issue.Body = *body
+	}
+	command := "issue edit"
+	operationID := ledger.NewOperationID(command, startedAt)
+	issue.Source.Operations = append(issue.Source.Operations, sourceOperationRef(operationID, command, startedAt))
+	issue.UpdatedAt = startedAt
+	event := localIssueEditEvent(issue.Source, issue.Number, issue.Title, issue.Body, startedAt)
+	writer := ledger.Writer{Root: *root}
+	diff, err := writer.DiffLocalIssueEvent(issue, event)
+	if err != nil {
+		return err
+	}
+	ledgerExisted := fileExists(filepath.Join(*root, "ledger.json"))
+	if err := writer.WriteLocalIssueEvent(issue, event); err != nil {
+		return err
+	}
+	if err := addLedgerMetadataChange(&diff, *root, ledgerExisted); err != nil {
+		return err
+	}
+	operation := localIssueOperation(operationID, command, args, startedAt, time.Now().UTC(), *root, source, diff, *includeLocal)
+	operation.Output.Summary.Issues = 1
+	if err := writer.WriteOperation(operation); err != nil {
+		return err
+	}
+
+	fmt.Fprintln(stdout, "Issue edited")
+	writeIndentedField(stdout, "Source", ledger.SourceSpec(source))
+	writeIndentedField(stdout, "Issue", fmt.Sprintf("#%d", issue.Number))
 	return nil
 }
 
@@ -358,6 +442,15 @@ func parseLocalIssueSource(value string) (model.Source, error) {
 	return ledger.ParseSourceSpec(value)
 }
 
+func flagPassed(args []string, name string) bool {
+	for _, arg := range args {
+		if arg == name || strings.HasPrefix(arg, name+"=") {
+			return true
+		}
+	}
+	return false
+}
+
 func localIssue(source model.Source, number int, title, body string, createdAt time.Time) model.Issue {
 	source.URL = ""
 	id := fmt.Sprintf("waystone:issue:%s/%s:%d", source.Owner, source.Repo, number)
@@ -429,6 +522,13 @@ func localIssueEvent(source model.Source, issueNumber int, eventType string, cre
 		Author:      model.Author{Login: "local"},
 		CreatedAt:   createdAt,
 	}
+}
+
+func localIssueEditEvent(source model.Source, issueNumber int, title, body string, createdAt time.Time) model.IssueEvent {
+	event := localIssueEvent(source, issueNumber, "issue.edited", createdAt)
+	event.Title = title
+	event.Body = body
+	return event
 }
 
 func sourceOperationRef(id, command string, startedAt time.Time) model.SourceOperationRef {
