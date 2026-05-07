@@ -395,6 +395,28 @@ func (r Reader) SourceMilestones(source model.Source) ([]model.Milestone, error)
 	return milestones, nil
 }
 
+func (r Reader) SourceReleases(source model.Source) ([]model.Release, error) {
+	releases, err := readDirJSON[model.Release](filepath.Join(r.Root, sourceScopedPath(source), "releases"))
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(releases, func(i, j int) bool {
+		left := releases[i].PublishedAt
+		if left.IsZero() {
+			left = releases[i].CreatedAt
+		}
+		right := releases[j].PublishedAt
+		if right.IsZero() {
+			right = releases[j].CreatedAt
+		}
+		if left.Equal(right) {
+			return releases[i].ID < releases[j].ID
+		}
+		return left.Before(right)
+	})
+	return releases, nil
+}
+
 func (r Reader) Audits() ([]model.GitHubAudit, error) {
 	audits, err := readObjectTreeJSON[model.GitHubAudit](r.Root, "audits")
 	if err != nil {

@@ -82,7 +82,23 @@ waystone issue reopen --source owner/repo --issue <number>
 
 It creates open local issues under `waystone:` sources only and supports local labels, title/body edits plus the first narrow comment, close and reopen lifecycle. Bare `owner/repo` names are accepted for local-authoring commands that do not touch imported forges. Assignment, sync and conflict handling remain deferred.
 
-## Phase 3: Patches And Reviews
+## Phase 3: Migration Reports
+
+Goal:
+```text
+Explain what migration preserves, transforms or loses before Waystone writes to another forge.
+```
+
+First command:
+```sh
+waystone migrate report --from github:owner/repo --to waystone:owner/repo
+```
+
+The first migration report is read-only. It counts imported records, local continuation records, identity handling and known gaps such as attachments, user mapping and CI history.
+
+I am keeping source IDs immutable. Target IDs are projections, not rewritten source facts.
+
+## Phase 4: Patches And Reviews
 
 Goal:
 ```text
@@ -98,7 +114,7 @@ waystone review add
 
 I'm deferring this until imported records, local issues, identities and authority are stable. Review records are useful but they multiply edge cases quickly.
 
-## Phase 4: Sync
+## Phase 5: Sync
 
 Goal:
 ```text
@@ -115,7 +131,7 @@ Possible transports:
 
 I won't decide the sync model before Phase 1 and Phase 2 produce real constraints. Git refs are attractive, but choosing them too early risks designing around a storage preference instead of a workflow.
 
-## Phase 5: Web Viewer
+## Phase 6: Web Viewer
 
 Goal:
 ```text

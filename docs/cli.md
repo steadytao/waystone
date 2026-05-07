@@ -162,6 +162,17 @@ waystone audit show <audit-id> --json
 
 Audit browse commands read locally persisted audit records. They do not contact GitHub.
 
+## Migration Reports
+
+```sh
+waystone migrate report --from github:steadytao/waymark --to waystone:steadytao/waymark
+waystone migrate report --from github:steadytao/waymark --to waystone:steadytao/waymark --json
+```
+
+`migrate report` reads local ledger data only. It does not contact a forge, create target records or write operation records.
+
+The report counts preserved source records, local continuation records and known migration gaps. Original source IDs remain immutable ledger facts. Target IDs are not assigned by the read-only report.
+
 ## Archive Export And Import
 
 ```sh

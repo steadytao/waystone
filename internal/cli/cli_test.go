@@ -557,6 +557,81 @@ func TestLedgerDiffCommand(t *testing.T) {
 	}
 }
 
+func TestMigrateReportCommandPrintsReadOnlyReport(t *testing.T) {
+	root := writeTestLedger(t)
+	createLocalIssueAndLabel(t, root)
+	if err := Run(context.Background(), []string{"issue", "label", "add", "--ledger", root, "--source", "steadytao/waystone", "--issue", "1", "bug"}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("issue label add returned error: %v", err)
+	}
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"migrate", "report", "--ledger", root, "--from", "github:example/project", "--to", "waystone:steadytao/waystone"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("migrate report returned error: %v", err)
+	}
+	for _, want := range []string{
+		"Migration report",
+		"From             github:example/project",
+		"To               waystone:steadytao/waystone",
+		"Records",
+		"Issues           1",
+		"Pull requests    1",
+		"Comments         2",
+		"Labels           1",
+		"Milestones       1",
+		"Releases         0",
+		"Identity",
+		"Source IDs       preserved",
+		"Target IDs       not assigned",
+		"Strategy         preserve-source-numbering",
+		"Local continuation",
+		"Local issues     1",
+		"Local labels     1",
+		"Local events     1",
+		"Warnings",
+		"- Attachments are not yet represented",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+		}
+	}
+	operations, err := (ledger.Reader{Root: root}).Operations()
+	if err != nil {
+		t.Fatalf("Operations returned error: %v", err)
+	}
+	if operations[len(operations)-1].Command == "migrate report" {
+		t.Fatal("migrate report wrote an operation, want read-only command")
+	}
+}
+
+func TestMigrateReportCommandWritesJSON(t *testing.T) {
+	root := writeTestLedger(t)
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"migrate", "report", "--ledger", root, "--from", "github:example/project", "--to", "waystone:steadytao/waystone", "--json"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("migrate report returned error: %v", err)
+	}
+	var report migrationReport
+	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+		t.Fatalf("decoding migration report JSON: %v\n%s", err, stdout.String())
+	}
+	if report.From != "github:example/project" || report.To != "waystone:steadytao/waystone" {
+		t.Fatalf("report sources = %q -> %q, want github:example/project -> waystone:steadytao/waystone", report.From, report.To)
+	}
+	if report.Records.Issues != 1 || report.Identity.Strategy != "preserve-source-numbering" {
+		t.Fatalf("report = %#v, want source counts and identity strategy", report)
+	}
+}
+
+func TestMigrateReportCommandRejectsUnknownStrategy(t *testing.T) {
+	root := writeTestLedger(t)
+	err := Run(context.Background(), []string{"migrate", "report", "--ledger", root, "--from", "github:example/project", "--to", "waystone:steadytao/waystone", "--strategy", "squash"}, io.Discard, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "unsupported migration numbering strategy") {
+		t.Fatalf("migrate report error = %v, want unsupported strategy error", err)
+	}
+}
+
 func TestLedgerExportImportCommands(t *testing.T) {
 	root := writeTestLedger(t)
 	archive := filepath.Join(t.TempDir(), "waystone-ledger.tar.zst")
@@ -636,6 +711,82 @@ func TestLedgerExportSourceCommand(t *testing.T) {
 	stdout.Reset()
 	if err := Run(context.Background(), []string{"ledger", "import", archive, "--ledger", imported, "--unsafe"}, &stdout, &stderr); err != nil {
 		t.Fatalf("source import returned error: %v", err)
+	}
+}
+
+func TestLocalLabelledIssueRoundTripValidation(t *testing.T) {
+	root := t.TempDir()
+	source := model.Source{System: "waystone", Owner: "steadytao", Repo: "waystone"}
+	var stdout, stderr bytes.Buffer
+
+	createLocalIssueAndLabel(t, root)
+	if err := Run(context.Background(), []string{"issue", "label", "add", "--ledger", root, "--source", "steadytao/waystone", "--issue", "1", "bug"}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("issue label add returned error: %v", err)
+	}
+	if err := Run(context.Background(), []string{"issue", "show", "--ledger", root, "--source", "waystone:steadytao/waystone", "1"}, &stdout, &stderr); err != nil {
+		t.Fatalf("issue show returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Software Issue (bug)") {
+		t.Fatalf("issue show stdout = %q, want resolved label", stdout.String())
+	}
+	stdout.Reset()
+	if err := Run(context.Background(), []string{"issue", "search", "--ledger", root, "--source", "waystone:steadytao/waystone", "--field", "label", "bug"}, &stdout, &stderr); err != nil {
+		t.Fatalf("issue search returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Issues         1") {
+		t.Fatalf("issue search stdout = %q, want label match", stdout.String())
+	}
+	if err := Run(context.Background(), []string{"issue", "label", "remove", "--ledger", root, "--source", "steadytao/waystone", "--issue", "1", "bug"}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("issue label remove returned error: %v", err)
+	}
+	stdout.Reset()
+	if err := Run(context.Background(), []string{"issue", "timeline", "--ledger", root, "--source", "waystone:steadytao/waystone", "1"}, &stdout, &stderr); err != nil {
+		t.Fatalf("issue timeline returned error: %v", err)
+	}
+	for _, want := range []string{"issue.opened", "issue.labeled", "issue.unlabeled", "Software Issue (bug)"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("issue timeline stdout = %q, want %q", stdout.String(), want)
+		}
+	}
+	stdout.Reset()
+	if err := Run(context.Background(), []string{"ledger", "verify", "--strict", "--ledger", root}, &stdout, &stderr); err != nil {
+		t.Fatalf("ledger verify returned error: %v", err)
+	}
+	archive := filepath.Join(t.TempDir(), "waystone-labelled")
+	stdout.Reset()
+	if err := Run(context.Background(), []string{"ledger", "export", "--ledger", root, "--out", archive}, &stdout, &stderr); err != nil {
+		t.Fatalf("ledger export returned error: %v", err)
+	}
+	stdout.Reset()
+	if err := Run(context.Background(), []string{"ledger", "inspect", archive}, &stdout, &stderr); err != nil {
+		t.Fatalf("ledger inspect returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Manifest") {
+		t.Fatalf("ledger inspect stdout = %q, want manifest evidence", stdout.String())
+	}
+
+	importedRoot := filepath.Join(t.TempDir(), ".waystone")
+	stdout.Reset()
+	if err := Run(context.Background(), []string{"ledger", "import", archive, "--ledger", importedRoot, "--unsafe"}, &stdout, &stderr); err != nil {
+		t.Fatalf("ledger import returned error: %v", err)
+	}
+	stdout.Reset()
+	if err := Run(context.Background(), []string{"ledger", "verify", "--strict", "--ledger", importedRoot}, &stdout, &stderr); err != nil {
+		t.Fatalf("imported ledger verify returned error: %v", err)
+	}
+	labels, err := (ledger.Reader{Root: importedRoot}).SourceLabels(source)
+	if err != nil {
+		t.Fatalf("SourceLabels returned error: %v", err)
+	}
+	if len(labels) != 1 || labels[0].Slug != "bug" || labels[0].Name != "Software Issue" || !strings.HasPrefix(labels[0].ID, "lbl_") {
+		t.Fatalf("imported labels = %#v, want stable local label", labels)
+	}
+	events, err := (ledger.Reader{Root: importedRoot}).SourceIssueEvents(source, 1)
+	if err != nil {
+		t.Fatalf("SourceIssueEvents returned error: %v", err)
+	}
+	if !hasIssueEvent(events, "issue.labeled", labels[0].ID) || !hasIssueEvent(events, "issue.unlabeled", labels[0].ID) {
+		t.Fatalf("imported events = %#v, want labelled and unlabelled events with label ID", events)
 	}
 }
 
@@ -1829,6 +1980,15 @@ func createLocalIssueAndLabel(t *testing.T, root string) {
 	if err := Run(context.Background(), []string{"label", "create", "--ledger", root, "--source", "steadytao/waystone", "--slug", "bug", "--name", "Software Issue", "--color", "d73a4a"}, io.Discard, io.Discard); err != nil {
 		t.Fatalf("label create returned error: %v", err)
 	}
+}
+
+func hasIssueEvent(events []model.IssueEvent, eventType, labelID string) bool {
+	for _, event := range events {
+		if event.Type == eventType && event.LabelID == labelID {
+			return true
+		}
+	}
+	return false
 }
 
 func writeTestLedger(t *testing.T) string {

@@ -100,6 +100,15 @@ waystone ledger doctor
 
 Strict verification checks JSON validity, operation-chain integrity and recorded object hashes. It detects accidental edits and local tampering, but it does not prove that the original forge content was correct.
 
+## Report Migration Shape
+
+Generate a read-only migration report:
+```sh
+waystone migrate report --from github:steadytao/waymark --to waystone:steadytao/waystone
+```
+
+The report counts preserved source records, local continuation records and known gaps. It does not contact a forge or write target records.
+
 ## Export The Ledger
 
 Export the full ledger:

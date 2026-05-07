@@ -33,6 +33,8 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		return runLabel(args[1:], stdout, stderr)
 	case "ledger":
 		return runLedger(ctx, args[1:], stdout, stderr)
+	case "migrate":
+		return runMigrate(args[1:], stdout, stderr)
 	case "milestone":
 		return runMilestone(args[1:], stdout, stderr)
 	case "pr":

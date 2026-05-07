@@ -36,8 +36,6 @@ If this file appears to conflict with those documents, follow the canonical docu
 
 Waystone is in an early implementation stage.
 
-Do not behave as if the project is production-ready. The current Go implementation is a local GitHub ledger importer and browser. Signing, local issue authoring, synchronisation and web viewing are future work.
-
 Be especially careful not to:
 - write documentation as if stable releases already exist
 - imply implementation maturity higher than the evidence supports

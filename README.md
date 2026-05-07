@@ -217,6 +217,8 @@ waystone ledger doctor
 waystone ledger export
 waystone ledger inspect <archive>
 waystone ledger import <archive>
+
+waystone migrate report --from <source> --to <source>
 ```
 
 Most browsing commands accept `--source <system>:<owner>/<repo>`, for example `github:owner/repo`. If no source is supplied, Waystone uses the default source in `ledger.json` when one is set.
@@ -248,6 +250,8 @@ The ledger is intended to preserve:
 - source manifest signatures when a local identity exists
 
 Sources are repo-specific namespaces. GitHub imports use `github:owner/repo`; `waystone:owner/repo` is reserved for local Waystone records. Issue, pull request and milestone numbers are source-local, so overlapping numbers across sources do not imply the same record.
+
+`waystone migrate report` uses those source namespaces to report what a migration can preserve, what remains local continuation history and what still needs a migration plan. It is read-only and does not assign target IDs.
 
 See [docs/ledger-format.md](docs/ledger-format.md) and [docs/operations.md](docs/operations.md).
 
