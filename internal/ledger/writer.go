@@ -90,6 +90,70 @@ func (w Writer) WriteLocalIssue(issue model.Issue) error {
 	return nil
 }
 
+func (w Writer) WriteLocalIssueComment(issue model.Issue, comment model.Comment) error {
+	if err := validateLocalIssueForWrite(w.Root, issue); err != nil {
+		return err
+	}
+	if comment.Source.System != "waystone" {
+		return fmt.Errorf("local comments must use waystone sources")
+	}
+	if comment.ID == "" {
+		return fmt.Errorf("comment ID must not be empty")
+	}
+	if comment.IssueNumber != issue.Number {
+		return fmt.Errorf("comment issue number does not match issue")
+	}
+	if err := w.writeLedgerMetadata(); err != nil {
+		return err
+	}
+	for _, target := range localIssueCommentTargets(issue, comment) {
+		if err := w.writeTarget(target); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (w Writer) WriteLocalIssueEvent(issue model.Issue, event model.IssueEvent) error {
+	if err := validateLocalIssueForWrite(w.Root, issue); err != nil {
+		return err
+	}
+	if event.Source.System != "waystone" {
+		return fmt.Errorf("local issue events must use waystone sources")
+	}
+	if event.ID == "" {
+		return fmt.Errorf("issue event ID must not be empty")
+	}
+	if event.IssueNumber != issue.Number {
+		return fmt.Errorf("issue event number does not match issue")
+	}
+	if err := w.writeLedgerMetadata(); err != nil {
+		return err
+	}
+	for _, target := range localIssueEventTargets(issue, event) {
+		if err := w.writeTarget(target); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateLocalIssueForWrite(root string, issue model.Issue) error {
+	if root == "" {
+		return fmt.Errorf("ledger root must not be empty")
+	}
+	if issue.Source.System != "waystone" {
+		return fmt.Errorf("local issues must use waystone sources")
+	}
+	if issue.Number <= 0 {
+		return fmt.Errorf("issue number must be positive")
+	}
+	if issue.ID == "" {
+		return fmt.Errorf("issue ID must not be empty")
+	}
+	return nil
+}
+
 func (w Writer) writeLedgerMetadata() error {
 	now := time.Now().UTC()
 	ledger := model.Ledger{
@@ -213,6 +277,73 @@ func localIssueTargets(issue model.Issue) []writeTarget {
 		{relative: sourceManifestPath(source), object: "source", id: source.System + ":" + source.Owner + "/" + source.Repo, value: source, source: true},
 		issueTarget,
 	}
+}
+
+func localIssueCommentTargets(issue model.Issue, comment model.Comment) []writeTarget {
+	manifestSource := issue.Source
+	issueTarget := localIssueTarget(issue)
+	embeddedSource := cleanEmbeddedSource(manifestSource)
+	comment.Provenance.Source = embeddedSource
+	comment.Source = embeddedSource
+	commentTarget := writeTarget{
+		relative: filepath.Join(sourceScopedPath(comment.Source), "comments", idFile(comment.ID)),
+		object:   "comment",
+		number:   comment.IssueNumber,
+		id:       comment.ID,
+		value:    comment,
+	}
+	return localIssueMutationTargets(manifestSource, issueTarget, commentTarget)
+}
+
+func localIssueEventTargets(issue model.Issue, event model.IssueEvent) []writeTarget {
+	manifestSource := issue.Source
+	issueTarget := localIssueTarget(issue)
+	embeddedSource := cleanEmbeddedSource(manifestSource)
+	event.Provenance.Source = embeddedSource
+	event.Source = embeddedSource
+	eventTarget := writeTarget{
+		relative: filepath.Join(sourceScopedPath(event.Source), "events", idFile(event.ID)),
+		object:   "issue_event",
+		number:   event.IssueNumber,
+		id:       event.ID,
+		value:    event,
+	}
+	return localIssueMutationTargets(manifestSource, issueTarget, eventTarget)
+}
+
+func localIssueTarget(issue model.Issue) writeTarget {
+	embeddedSource := cleanEmbeddedSource(issue.Source)
+	issue.Provenance.Source = embeddedSource
+	issue.Source = embeddedSource
+	return writeTarget{
+		relative: filepath.Join(sourceScopedPath(issue.Source), "issues", numberedFile(issue.Number)),
+		object:   "issue",
+		number:   issue.Number,
+		id:       issue.ID,
+		value:    issue,
+	}
+}
+
+func localIssueMutationTargets(source model.Source, targets ...writeTarget) []writeTarget {
+	source.Objects = append([]model.SourceObjectRef(nil), source.Objects...)
+	source.Operations = append([]model.SourceOperationRef(nil), source.Operations...)
+	for _, target := range targets {
+		ref, err := sourceObjectRef(target)
+		if err == nil {
+			source.Objects = upsertSourceObjectRef(source.Objects, ref)
+		}
+	}
+	result := []writeTarget{
+		{relative: sourceManifestPath(source), object: "source", id: source.System + ":" + source.Owner + "/" + source.Repo, value: source, source: true},
+	}
+	return append(result, targets...)
+}
+
+func cleanEmbeddedSource(source model.Source) model.Source {
+	source.Objects = nil
+	source.Operations = nil
+	source.Signature = nil
+	return source
 }
 
 func sourceObjectRefs(targets []writeTarget) []model.SourceObjectRef {

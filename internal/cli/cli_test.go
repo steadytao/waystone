@@ -919,6 +919,122 @@ func TestIssueCreateCommandWorksWithExistingIssueViews(t *testing.T) {
 	}
 }
 
+func TestIssueCommentCommandCreatesLocalComment(t *testing.T) {
+	root := t.TempDir()
+	if err := Run(context.Background(), []string{"issue", "create", "--ledger", root, "--source", "steadytao/waystone", "--title", "Discuss me"}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("issue create returned error: %v", err)
+	}
+
+	var out bytes.Buffer
+	if err := Run(context.Background(), []string{"issue", "comment", "--ledger", root, "--source", "steadytao/waystone", "--issue", "1", "--body", "Local comment"}, &out, io.Discard); err != nil {
+		t.Fatalf("issue comment returned error: %v", err)
+	}
+	for _, want := range []string{"Comment created", "Source           waystone:steadytao/waystone", "Issue            #1"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("stdout = %q, want %q", out.String(), want)
+		}
+	}
+
+	source := model.Source{System: "waystone", Owner: "steadytao", Repo: "waystone"}
+	comments, err := (ledger.Reader{Root: root}).SourceComments(source, 1)
+	if err != nil {
+		t.Fatalf("SourceComments returned error: %v", err)
+	}
+	if len(comments) != 1 || comments[0].Body != "Local comment" {
+		t.Fatalf("comments = %#v", comments)
+	}
+	issue, err := (ledger.Reader{Root: root}).SourceIssue(source, 1)
+	if err != nil {
+		t.Fatalf("SourceIssue returned error: %v", err)
+	}
+	if issue.Comments != 1 {
+		t.Fatalf("issue comments = %d, want 1", issue.Comments)
+	}
+	manifest, err := (ledger.Reader{Root: root}).Source(source)
+	if err != nil {
+		t.Fatalf("Source returned error: %v", err)
+	}
+	if len(manifest.Operations) != 2 {
+		t.Fatalf("source operations = %#v, want 2 operations", manifest.Operations)
+	}
+	if !sourceManifestHasObject(manifest, "comment") {
+		t.Fatalf("source objects = %#v, want comment ref", manifest.Objects)
+	}
+}
+
+func TestIssueLifecycleCommandsUpdateLocalStateAndTimeline(t *testing.T) {
+	root := t.TempDir()
+	source := model.Source{System: "waystone", Owner: "steadytao", Repo: "waystone"}
+	commands := [][]string{
+		{"issue", "create", "--ledger", root, "--source", "steadytao/waystone", "--title", "Lifecycle issue"},
+		{"issue", "comment", "--ledger", root, "--source", "steadytao/waystone", "--issue", "1", "--body", "First comment"},
+		{"issue", "close", "--ledger", root, "--source", "steadytao/waystone", "--issue", "1"},
+		{"issue", "reopen", "--ledger", root, "--source", "steadytao/waystone", "--issue", "1"},
+	}
+	for _, command := range commands {
+		if err := Run(context.Background(), command, io.Discard, io.Discard); err != nil {
+			t.Fatalf("Run(%v) returned error: %v", command, err)
+		}
+	}
+
+	issue, err := (ledger.Reader{Root: root}).SourceIssue(source, 1)
+	if err != nil {
+		t.Fatalf("SourceIssue returned error: %v", err)
+	}
+	if issue.State != "open" || !issue.ClosedAt.IsZero() {
+		t.Fatalf("issue = %#v, want reopened issue", issue)
+	}
+	manifest, err := (ledger.Reader{Root: root}).Source(source)
+	if err != nil {
+		t.Fatalf("Source returned error: %v", err)
+	}
+	if len(manifest.Operations) != 4 {
+		t.Fatalf("source operations = %#v, want 4 operations", manifest.Operations)
+	}
+	if !sourceManifestHasObject(manifest, "issue_event") {
+		t.Fatalf("source objects = %#v, want issue event refs", manifest.Objects)
+	}
+
+	var out bytes.Buffer
+	if err := Run(context.Background(), []string{"issue", "timeline", "--ledger", root, "--source", "waystone:steadytao/waystone", "1"}, &out, io.Discard); err != nil {
+		t.Fatalf("issue timeline returned error: %v", err)
+	}
+	for _, want := range []string{"issue.opened", "issue.comment", "issue.closed", "issue.reopened", "First comment"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("stdout = %q, want %q", out.String(), want)
+		}
+	}
+	if _, err := (ledger.Reader{Root: root}).VerifyOperations(); err != nil {
+		t.Fatalf("VerifyOperations returned error: %v", err)
+	}
+}
+
+func TestIssueLifecycleCommandsRefuseImportedSources(t *testing.T) {
+	root := t.TempDir()
+	for _, command := range [][]string{
+		{"issue", "comment", "--ledger", root, "--source", "github:steadytao/waystone", "--issue", "1", "--body", "Bad"},
+		{"issue", "close", "--ledger", root, "--source", "github:steadytao/waystone", "--issue", "1"},
+		{"issue", "reopen", "--ledger", root, "--source", "github:steadytao/waystone", "--issue", "1"},
+	} {
+		err := Run(context.Background(), command, io.Discard, io.Discard)
+		if err == nil {
+			t.Fatalf("Run(%v) returned nil error", command)
+		}
+		if !strings.Contains(err.Error(), "only supports waystone sources") {
+			t.Fatalf("Run(%v) error = %q", command, err)
+		}
+	}
+}
+
+func sourceManifestHasObject(source model.Source, object string) bool {
+	for _, ref := range source.Objects {
+		if ref.Object == object {
+			return true
+		}
+	}
+	return false
+}
+
 func TestDefaultSourceFiltersIssueList(t *testing.T) {
 	root := writeTestLedger(t)
 	writeTestLedgerSource(t, root, "example", "other")
