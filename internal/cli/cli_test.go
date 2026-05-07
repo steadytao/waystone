@@ -608,7 +608,7 @@ func TestMigrateReportCommandWritesJSON(t *testing.T) {
 	root := writeTestLedger(t)
 	var stdout, stderr bytes.Buffer
 
-	err := Run(context.Background(), []string{"migrate", "report", "--ledger", root, "--from", "github:example/project", "--to", "waystone:steadytao/waystone", "--json"}, &stdout, &stderr)
+	err := Run(context.Background(), []string{"migrate", "report", "--ledger", root, "--from", "github:example/project", "--to", "waystone:steadytao/waystone", "--numbering-strategy", "preserve-source-numbering", "--json"}, &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("migrate report returned error: %v", err)
 	}
@@ -626,9 +626,69 @@ func TestMigrateReportCommandWritesJSON(t *testing.T) {
 
 func TestMigrateReportCommandRejectsUnknownStrategy(t *testing.T) {
 	root := writeTestLedger(t)
-	err := Run(context.Background(), []string{"migrate", "report", "--ledger", root, "--from", "github:example/project", "--to", "waystone:steadytao/waystone", "--strategy", "squash"}, io.Discard, io.Discard)
-	if err == nil || !strings.Contains(err.Error(), "unsupported migration numbering strategy") {
+	err := Run(context.Background(), []string{"migrate", "report", "--ledger", root, "--from", "github:example/project", "--to", "waystone:steadytao/waystone", "--numbering-strategy", "squash"}, io.Discard, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "only preserve-source-numbering is supported") {
 		t.Fatalf("migrate report error = %v, want unsupported strategy error", err)
+	}
+}
+
+func TestMigratePlanCommandWritesDeterministicPlan(t *testing.T) {
+	root := writeTestLedger(t)
+	out := filepath.Join(t.TempDir(), "waystone-migration-plan.json")
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"migrate", "plan", "--ledger", root, "--from", "github:example/project", "--to", "waystone:steadytao/waystone", "--numbering-strategy", "preserve-source-numbering", "--out", out}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("migrate plan returned error: %v", err)
+	}
+	for _, want := range []string{"Migration plan written", "Records          7", out} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+		}
+	}
+	data, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("read migration plan: %v", err)
+	}
+	var plan model.MigrationPlan
+	if err := json.Unmarshal(data, &plan); err != nil {
+		t.Fatalf("decoding migration plan: %v\n%s", err, data)
+	}
+	if plan.Version != "waystone.migration_plan.v1" || plan.ToolVersion != Version {
+		t.Fatalf("plan version/tool = %q/%q, want waystone.migration_plan.v1/%s", plan.Version, plan.ToolVersion, Version)
+	}
+	if plan.From != "github:example/project" || plan.To != "waystone:steadytao/waystone" {
+		t.Fatalf("plan sources = %q -> %q, want github:example/project -> waystone:steadytao/waystone", plan.From, plan.To)
+	}
+	if plan.Strategy.Numbering != "preserve-source-numbering" || plan.Strategy.TargetWrite != "none" {
+		t.Fatalf("plan strategy = %#v, want safe read-only defaults", plan.Strategy)
+	}
+	if got := migrationPlanRecordKeys(plan.Records); strings.Join(got, ",") != "issue:1,comment:20,comment:21,pull_request:2,review_comment:40,label:50,milestone:1" {
+		t.Fatalf("record order = %v, want deterministic source record order", got)
+	}
+	first := plan.Records[0]
+	if first.SourceID != "github:issue:10" || first.SourceNumber != 1 || first.SourceURL != "https://github.com/example/project/issues/1" || first.WaystoneID != "github:issue:10" {
+		t.Fatalf("first record = %#v, want issue source identity", first)
+	}
+	if first.TargetSource != "waystone:steadytao/waystone" || first.TargetKey == "" || first.NumberingStrategy != "preserve-source-numbering" {
+		t.Fatalf("first target mapping = %#v, want read-only target projection", first)
+	}
+	operations, err := (ledger.Reader{Root: root}).Operations()
+	if err != nil {
+		t.Fatalf("Operations returned error: %v", err)
+	}
+	if operations[len(operations)-1].Command == "migrate plan" {
+		t.Fatal("migrate plan wrote an operation, want saved artefact only")
+	}
+}
+
+func TestMigratePlanCommandRejectsUnknownNumberingStrategy(t *testing.T) {
+	root := writeTestLedger(t)
+	out := filepath.Join(t.TempDir(), "waystone-migration-plan.json")
+
+	err := Run(context.Background(), []string{"migrate", "plan", "--ledger", root, "--from", "github:example/project", "--to", "waystone:steadytao/waystone", "--numbering-strategy", "chronological-renumber", "--out", out}, io.Discard, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "only preserve-source-numbering is supported") {
+		t.Fatalf("migrate plan error = %v, want unsupported v0 strategy error", err)
 	}
 }
 
@@ -1989,6 +2049,22 @@ func hasIssueEvent(events []model.IssueEvent, eventType, labelID string) bool {
 		}
 	}
 	return false
+}
+
+func migrationPlanRecordKeys(records []model.MigrationPlanRecord) []string {
+	keys := make([]string, 0, len(records))
+	for _, record := range records {
+		if record.SourceNumber > 0 {
+			keys = append(keys, fmt.Sprintf("%s:%d", record.Object, record.SourceNumber))
+			continue
+		}
+		id := record.SourceID
+		if n := strings.LastIndex(id, ":"); n >= 0 {
+			id = id[n+1:]
+		}
+		keys = append(keys, record.Object+":"+id)
+	}
+	return keys
 }
 
 func writeTestLedger(t *testing.T) string {
