@@ -48,6 +48,14 @@ func (w Writer) WriteGitHubImport(imported model.GitHubImport) error {
 	return nil
 }
 
+func (w Writer) WriteForgeImport(imported model.GitHubImport) error {
+	return w.WriteGitHubImport(imported)
+}
+
+func (w Writer) DiffForgeImport(imported model.GitHubImport) (Diff, error) {
+	return w.DiffGitHubImport(imported)
+}
+
 func (w Writer) WriteGitHubAudit(audit model.GitHubAudit) error {
 	if w.Root == "" {
 		return fmt.Errorf("ledger root must not be empty")

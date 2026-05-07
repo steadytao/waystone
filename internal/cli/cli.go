@@ -25,6 +25,8 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		return runAudit(args[1:], stdout, stderr)
 	case "github":
 		return runGitHub(ctx, args[1:], stdout, stderr)
+	case "gitlab":
+		return runGitLab(ctx, args[1:], stdout, stderr)
 	case "identity":
 		return runIdentity(args[1:], stdout, stderr)
 	case "issue":

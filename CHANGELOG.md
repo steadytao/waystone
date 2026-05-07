@@ -12,6 +12,8 @@ The format is based on Keep a Changelog and Waystone intends to follow Semantic 
 - `waystone migrate report --from <source> --to <source>` for read-only migration preservation and gap reporting
 - `waystone migrate plan --from <source> --to <source> --numbering-strategy preserve-source-numbering --out <file>` for saved read-only migration plans
 - ADR 0017 for migration mapping and source ID preservation
+- `waystone gitlab import group/project` for read-only GitLab project history import
+- ADR 0018 for GitLab read-only import scope and constraints
 
 ### Changed
 

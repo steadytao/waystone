@@ -39,6 +39,7 @@ Current records:
 - [`0015-local-issue-lifecycle.md`](0015-local-issue-lifecycle.md)
 - [`0016-local-issue-labels.md`](0016-local-issue-labels.md)
 - [`0017-migration-mapping.md`](0017-migration-mapping.md)
+- [`0018-gitlab-read-only-import.md`](0018-gitlab-read-only-import.md)
 
 ## Notes
 
