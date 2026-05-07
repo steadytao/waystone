@@ -41,6 +41,13 @@ Show issue comments:
 waystone issue comments 15
 ```
 
+Create a local Waystone issue beside imported history:
+```sh
+waystone issue create --source steadytao/waystone --title "Follow up on imported history"
+```
+
+Local issue authoring is source-local. It does not mutate imported `github:` sources.
+
 List pull requests:
 ```sh
 waystone pr list

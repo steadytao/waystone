@@ -68,7 +68,12 @@ waystone issue comment <id>
 waystone issue close <id>
 ```
 
-I'll only add local signed records after the imported ledger model has proven useful. Otherwise the project will be designing local authority rules before it has enough real data.
+First local authoring step:
+```sh
+waystone issue create --source owner/repo --title <title>
+```
+
+It creates open local issues under `waystone:` sources only. Bare `owner/repo` names are accepted for local-authoring commands that do not touch imported forges. Comments, closing, labels, assignment, sync and conflict handling remain deferred.
 
 ## Phase 3: Patches And Reviews
 

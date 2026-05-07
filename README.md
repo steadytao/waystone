@@ -53,6 +53,7 @@ The current prototype includes:
 - issue and pull request browsing
 - comment and timeline views
 - label and milestone listing
+- local issue creation under `waystone:` sources
 - local issue and pull request search
 - operation records for ledger-changing and verification commands
 - object hashes and strict ledger verification
@@ -134,6 +135,7 @@ waystone source default github:steadytao/waymark
 Browse imported records:
 ```bash
 waystone issue list
+waystone issue create --source steadytao/waystone --title "Example local issue"
 waystone issue show 15
 waystone issue comments 15
 waystone pr list
@@ -178,6 +180,7 @@ waystone source refresh
 waystone source status
 
 waystone issue list
+waystone issue create --source owner/repo --title <title>
 waystone issue search <text>
 waystone issue show <number>
 waystone issue comments <number>
@@ -232,7 +235,7 @@ The ledger is intended to preserve:
 - operation signatures when a local identity exists
 - source manifest signatures when a local identity exists
 
-Sources are repo-specific namespaces. GitHub imports use `github:owner/repo`; `waystone:owner/repo` is reserved for future local Waystone records. Issue, pull request and milestone numbers are source-local, so overlapping numbers across sources do not imply the same record.
+Sources are repo-specific namespaces. GitHub imports use `github:owner/repo`; `waystone:owner/repo` is reserved for local Waystone records. Issue, pull request and milestone numbers are source-local, so overlapping numbers across sources do not imply the same record.
 
 See [docs/ledger-format.md](docs/ledger-format.md) and [docs/operations.md](docs/operations.md).
 

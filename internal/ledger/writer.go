@@ -66,6 +66,30 @@ func (w Writer) WriteGitHubAudit(audit model.GitHubAudit) error {
 	return nil
 }
 
+func (w Writer) WriteLocalIssue(issue model.Issue) error {
+	if w.Root == "" {
+		return fmt.Errorf("ledger root must not be empty")
+	}
+	if issue.Source.System != "waystone" {
+		return fmt.Errorf("local issues must use waystone sources")
+	}
+	if issue.Number <= 0 {
+		return fmt.Errorf("issue number must be positive")
+	}
+	if issue.ID == "" {
+		return fmt.Errorf("issue ID must not be empty")
+	}
+	if err := w.writeLedgerMetadata(); err != nil {
+		return err
+	}
+	for _, target := range localIssueTargets(issue) {
+		if err := w.writeTarget(target); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (w Writer) writeLedgerMetadata() error {
 	now := time.Now().UTC()
 	ledger := model.Ledger{
@@ -161,6 +185,33 @@ func gitHubAuditTargets(audit model.GitHubAudit) []writeTarget {
 	return []writeTarget{
 		{relative: sourceManifestPath(source), object: "source", id: source.System + ":" + source.Owner + "/" + source.Repo, value: source, source: true},
 		auditTarget,
+	}
+}
+
+func localIssueTargets(issue model.Issue) []writeTarget {
+	manifestSource := issue.Source
+	embeddedSource := manifestSource
+	embeddedSource.Objects = nil
+	embeddedSource.Operations = nil
+	issue.Provenance.Source = embeddedSource
+	issue.Source = embeddedSource
+	issueTarget := writeTarget{
+		relative: filepath.Join(sourceScopedPath(issue.Source), "issues", numberedFile(issue.Number)),
+		object:   "issue",
+		number:   issue.Number,
+		id:       issue.ID,
+		value:    issue,
+	}
+	source := manifestSource
+	source.Objects = append([]model.SourceObjectRef(nil), manifestSource.Objects...)
+	source.Operations = append([]model.SourceOperationRef(nil), manifestSource.Operations...)
+	ref, err := sourceObjectRef(issueTarget)
+	if err == nil {
+		source.Objects = upsertSourceObjectRef(source.Objects, ref)
+	}
+	return []writeTarget{
+		{relative: sourceManifestPath(source), object: "source", id: source.System + ":" + source.Owner + "/" + source.Repo, value: source, source: true},
+		issueTarget,
 	}
 }
 
