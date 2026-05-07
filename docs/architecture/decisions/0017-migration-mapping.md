@@ -1,8 +1,10 @@
 # 0017: Migration mapping
 
-## Status
-
-Accepted
+<!-- ![Proposed](https://img.shields.io/badge/status-proposed-informational?style=for-the-badge) -->
+![Accepted](https://img.shields.io/badge/status-accepted-brightgreen?style=for-the-badge)
+<!-- ![Superseded](https://img.shields.io/badge/status-superseded-yellow?style=for-the-badge) -->
+<!-- ![Deprecated](https://img.shields.io/badge/status-deprecated-orange?style=for-the-badge) -->
+<!-- ![Denied](https://img.shields.io/badge/status-denied-red?style=for-the-badge) -->
 
 ## Context
 

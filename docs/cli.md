@@ -97,6 +97,22 @@ Import complete
 
 Use `--v` or `--verbose` for per-record fetch progress.
 
+## GitLab Import
+
+```sh
+GITLAB_TOKEN=<token> waystone gitlab import example/project
+waystone gitlab import --api-base https://gitlab.example.com/api/v4 example/project
+waystone gitlab import example/project --concurrency 12
+```
+
+GitLab import is read-only. It imports project metadata, issues, issue notes, merge requests, merge request notes, labels, milestones and releases into a `gitlab:group/project` source namespace.
+
+`GITLAB_TOKEN` is required because GitLab note endpoints can require authentication even for public projects. The token is never stored. OAuth, device-flow login and credential-store support are not part of the first GitLab import.
+
+Use `--concurrency` to control bounded concurrent note and detail requests. The default is `8`.
+
+Nested GitLab groups are not supported yet because Waystone's current source namespace model is `system:owner/repo`.
+
 ## Sources
 
 ```sh

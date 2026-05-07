@@ -199,6 +199,115 @@ func TestGitHubAuditCommandPrintsExitReadinessReport(t *testing.T) {
 	}
 }
 
+func TestGitLabImportCommandWritesLedgerRecord(t *testing.T) {
+	apiBase := gitLabImportTestServer(t)
+	root := t.TempDir()
+	t.Setenv("GITLAB_TOKEN", "test-token")
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"gitlab", "import", "--api-base", apiBase, "--out", root, "example/project"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("gitlab import returned error: %v stderr=%q", err, stderr.String())
+	}
+	for _, want := range []string{
+		"Project",
+		"example/project",
+		"Import complete",
+		"Issues           1",
+		"Comments         2",
+		"Pull requests    1",
+		"Labels           1",
+		"Milestones       1",
+		"Releases         1",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+		}
+	}
+	reader := ledger.Reader{Root: root}
+	source := model.Source{System: "gitlab", Owner: "example", Repo: "project"}
+	if _, err := reader.Source(source); err != nil {
+		t.Fatalf("Source returned error: %v", err)
+	}
+	issues, err := reader.SourceIssues(source)
+	if err != nil {
+		t.Fatalf("SourceIssues returned error: %v", err)
+	}
+	if len(issues) != 1 || issues[0].ID != "gitlab:issue:101:1" || issues[0].OriginalURL != "https://gitlab.example.com/example/project/-/issues/1" {
+		t.Fatalf("issues = %#v, want GitLab issue identity and URL", issues)
+	}
+	prs, err := reader.SourcePullRequests(source)
+	if err != nil {
+		t.Fatalf("SourcePullRequests returned error: %v", err)
+	}
+	if len(prs) != 1 || prs[0].ID != "gitlab:merge_request:101:2" || prs[0].Number != 2 {
+		t.Fatalf("pull requests = %#v, want GitLab merge request as source-preserved change proposal evidence", prs)
+	}
+	comments, err := reader.SourceComments(source, 2)
+	if err != nil {
+		t.Fatalf("SourceComments returned error: %v", err)
+	}
+	if len(comments) != 1 || comments[0].ID != "gitlab:merge_request_note:101:2:302" {
+		t.Fatalf("merge request comments = %#v, want GitLab merge request note", comments)
+	}
+	operations, err := reader.Operations()
+	if err != nil {
+		t.Fatalf("Operations returned error: %v", err)
+	}
+	if len(operations) != 1 || operations[0].Command != "gitlab import" || operations[0].Auth.Provider != "gitlab" || operations[0].Auth.Mode != "environment" {
+		t.Fatalf("operations = %#v, want gitlab import operation with environment auth", operations)
+	}
+}
+
+func TestGitLabImportCommandRequiresToken(t *testing.T) {
+	apiBase := gitLabImportTestServer(t)
+	root := t.TempDir()
+	t.Setenv("GITLAB_TOKEN", "")
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"gitlab", "import", "--api-base", apiBase, "--out", root, "example/project"}, &stdout, &stderr)
+	if err == nil || !strings.Contains(err.Error(), "GITLAB_TOKEN must be set") {
+		t.Fatalf("gitlab import error = %v, want missing token error", err)
+	}
+}
+
+func TestGitLabImportCommandReportsRequiredTokenScope(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		fmt.Fprint(w, `{"error":"insufficient_scope","error_description":"The request requires higher privileges than provided by the access token.","scope":"api read_api"}`)
+	}))
+	t.Cleanup(server.Close)
+	root := t.TempDir()
+	t.Setenv("GITLAB_TOKEN", "test-token")
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"gitlab", "import", "--api-base", server.URL, "--out", root, "example/project"}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("gitlab import returned nil error, want insufficient scope error")
+	}
+	for _, want := range []string{"insufficient_scope", "higher privileges", "api read_api"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("gitlab import error = %q, want %q", err.Error(), want)
+		}
+	}
+}
+
+func TestGitLabImportCommandAcceptsFlagsAfterProject(t *testing.T) {
+	apiBase := gitLabImportTestServer(t)
+	root := t.TempDir()
+	t.Setenv("GITLAB_TOKEN", "test-token")
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"gitlab", "import", "example/project", "--api-base", apiBase, "--out", root}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("gitlab import returned error: %v stderr=%q", err, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Import complete") {
+		t.Fatalf("stdout = %q, want successful import", stdout.String())
+	}
+}
+
 func TestGitHubAuditCommandVerbosePrintsActionEvidence(t *testing.T) {
 	apiBase := githubAuditTestServer(t)
 	var stdout, stderr bytes.Buffer
@@ -2192,6 +2301,37 @@ func githubAuditInaccessibleTestServer(t *testing.T) string {
 			"/repos/example/project/pages":
 			w.WriteHeader(http.StatusForbidden)
 			fmt.Fprint(w, `{"message":"forbidden"}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+	return server.URL
+}
+
+func gitLabImportTestServer(t *testing.T) string {
+	t.Helper()
+	createdAt := "2026-01-01T00:00:00Z"
+	updatedAt := "2026-01-02T00:00:00Z"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/projects/example/project":
+			fmt.Fprintf(w, `{"id":101,"path_with_namespace":"example/project","description":"test project","web_url":"https://gitlab.example.com/example/project","created_at":%q,"last_activity_at":%q}`, createdAt, updatedAt)
+		case "/projects/example/project/issues":
+			fmt.Fprintf(w, `[{"id":201,"iid":1,"title":"issue","description":"issue body","state":"opened","author":{"id":1,"username":"alice","name":"Alice","web_url":"https://gitlab.example.com/alice","avatar_url":"https://gitlab.example.com/avatar.png"},"labels":["bug"],"milestone":{"id":401,"iid":1,"title":"v1","description":"version one","state":"active","web_url":"https://gitlab.example.com/example/project/-/milestones/1","created_at":%q,"updated_at":%q},"user_notes_count":1,"web_url":"https://gitlab.example.com/example/project/-/issues/1","created_at":%q,"updated_at":%q}]`, createdAt, updatedAt, createdAt, updatedAt)
+		case "/projects/example/project/issues/1/notes":
+			fmt.Fprintf(w, `[{"id":301,"author":{"id":2,"username":"bob","name":"Bob","web_url":"https://gitlab.example.com/bob"},"body":"issue note","system":false,"created_at":%q,"updated_at":%q}]`, createdAt, updatedAt)
+		case "/projects/example/project/merge_requests":
+			fmt.Fprintf(w, `[{"id":202,"iid":2,"title":"merge request","description":"merge body","state":"merged","author":{"id":1,"username":"alice","name":"Alice","web_url":"https://gitlab.example.com/alice"},"web_url":"https://gitlab.example.com/example/project/-/merge_requests/2","source_branch":"feature","target_branch":"main","created_at":%q,"updated_at":%q,"merged_at":"2026-01-03T00:00:00Z"}]`, createdAt, updatedAt)
+		case "/projects/example/project/merge_requests/2/notes":
+			fmt.Fprintf(w, `[{"id":302,"author":{"id":3,"username":"carol","name":"Carol","web_url":"https://gitlab.example.com/carol"},"body":"merge request note","system":false,"created_at":%q,"updated_at":%q}]`, createdAt, updatedAt)
+		case "/projects/example/project/labels":
+			fmt.Fprint(w, `[{"id":501,"name":"bug","color":"#d73a4a","description":"Something broken"}]`)
+		case "/projects/example/project/milestones":
+			fmt.Fprintf(w, `[{"id":401,"iid":1,"title":"v1","description":"version one","state":"active","web_url":"https://gitlab.example.com/example/project/-/milestones/1","created_at":%q,"updated_at":%q}]`, createdAt, updatedAt)
+		case "/projects/example/project/releases":
+			fmt.Fprintf(w, `[{"tag_name":"v0.1.0","name":"v0.1.0","description":"release notes","author":{"id":1,"username":"alice","name":"Alice","web_url":"https://gitlab.example.com/alice"},"_links":{"self":"https://gitlab.example.com/example/project/-/releases/v0.1.0"},"created_at":%q,"released_at":"2026-01-04T00:00:00Z"}]`, createdAt)
 		default:
 			http.NotFound(w, r)
 		}

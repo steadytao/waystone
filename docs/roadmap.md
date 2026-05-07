@@ -107,6 +107,13 @@ I am keeping source IDs immutable. Target IDs are projections, not rewritten sou
 
 ## Phase 4: Patches And Reviews
 
+Before this phase, Waystone should add GitLab read-only import and Forgejo/Gitea read-only import. Those imports are migration-model proof points, not separate product phases.
+
+Current GitLab import command:
+```sh
+waystone gitlab import group/project
+```
+
 Goal:
 ```text
 Represent reviewable code collaboration records.

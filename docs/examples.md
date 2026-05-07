@@ -19,6 +19,11 @@ Import a repository:
 waystone github import steadytao/waymark
 ```
 
+Import a GitLab project:
+```sh
+waystone gitlab import example/project
+```
+
 Set the imported repository as the default browsing source:
 ```sh
 waystone source default github:steadytao/waymark

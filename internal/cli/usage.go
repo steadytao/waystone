@@ -17,6 +17,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  waystone github audit [flags] owner/repo")
 	fmt.Fprintln(w, "  waystone github import [flags] owner/repo")
 	fmt.Fprintln(w, "  waystone github refresh [flags] owner/repo")
+	fmt.Fprintln(w, "  waystone gitlab import [flags] group/project")
 	fmt.Fprintln(w, "  waystone identity init [flags]")
 	fmt.Fprintln(w, "  waystone identity list [flags]")
 	fmt.Fprintln(w, "  waystone identity show [flags]")
@@ -75,6 +76,11 @@ func printGitHubAuthUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage:")
 	fmt.Fprintln(w, "  waystone github auth login [flags]")
 	fmt.Fprintln(w, "  waystone github auth logout [flags]")
+}
+
+func printGitLabUsage(w io.Writer) {
+	fmt.Fprintln(w, "Usage:")
+	fmt.Fprintln(w, "  waystone gitlab import [flags] group/project")
 }
 
 func printIssueUsage(w io.Writer) {

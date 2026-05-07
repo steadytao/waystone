@@ -27,6 +27,7 @@ Waystone is experimental research software. It is not ready for production use.
 - [Command Surface](#command-surface)
 - [Ledger Model](#ledger-model)
 - [GitHub Import](#github-import)
+- [GitLab Import](#gitlab-import)
 - [Archive Import and Export](#archive-import-and-export)
 - [Security and Privacy](#security-and-privacy)
 - [Documentation](#documentation)
@@ -47,6 +48,7 @@ The current prototype includes:
 - GitHub OAuth device flow login
 - `GITHUB_TOKEN` override support
 - GitHub repository import
+- GitLab read-only project import
 - GitHub exit-readiness audit for workflow, policy, release and project-metadata surfaces
 - local ledger storage under `.waystone/`
 - source manifests for imported repositories
@@ -167,6 +169,7 @@ waystone github auth logout
 waystone github audit owner/repo
 waystone github import owner/repo
 waystone github refresh owner/repo
+waystone gitlab import group/project
 
 waystone identity init
 waystone identity list
@@ -274,6 +277,26 @@ GitHub import currently preserves:
 `GITHUB_TOKEN` always takes precedence and is never persisted by Waystone.
 
 Without `GITHUB_TOKEN`, `waystone github auth login` uses the GitHub OAuth device flow and stores the token in the operating system credential store. Use `OAUTH_CLIENT_ID` or `--client-id` to use your own OAuth app. Use `--plain-file-store` only as an explicit development fallback when the OS credential store is unavailable.
+
+## GitLab Import
+
+GitLab import currently preserves:
+- project metadata
+- issues
+- issue notes
+- merge requests
+- merge request notes
+- labels
+- milestones
+- releases
+- source manifests
+- import operation records
+
+GitLab imports use `gitlab:group/project` source namespaces. `GITLAB_TOKEN` is required because GitLab note endpoints can require authentication even for public projects. The token is never persisted by Waystone.
+
+The first GitLab import is read-only. It does not support export, sync, OAuth, stored GitLab credentials or nested GitLab groups.
+
+Use `--concurrency` to control bounded concurrent GitLab note and detail requests. The default is `8`.
 
 ## Archive Import and Export
 
