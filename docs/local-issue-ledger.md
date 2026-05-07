@@ -85,6 +85,25 @@ A local issue timeline can include:
 - `issue.closed`
 - `issue.reopened`
 
+## Browsing
+
+List local open issues:
+```sh
+waystone issue list --source waystone:owner/repo --state open
+```
+
+List local closed issues:
+```sh
+waystone issue list --source waystone:owner/repo --state closed
+```
+
+Search local issues:
+```sh
+waystone issue search --source waystone:owner/repo --state all "release"
+```
+
+`--state` accepts `open`, `closed` and `all`.
+
 ## Verification And Export
 
 Local authored issue history should survive the same integrity checks and archive path as imported history:

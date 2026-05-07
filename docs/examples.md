@@ -31,6 +31,11 @@ List issues from the default source:
 waystone issue list
 ```
 
+List only open local issues:
+```sh
+waystone issue list --source waystone:steadytao/waystone --state open
+```
+
 Show an issue:
 ```sh
 waystone issue show 15

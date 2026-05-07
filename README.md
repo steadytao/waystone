@@ -190,6 +190,8 @@ waystone issue comment --source owner/repo --issue <number>
 waystone issue close --source owner/repo --issue <number>
 waystone issue reopen --source owner/repo --issue <number>
 waystone issue search <text>
+waystone issue search --state open <text>
+waystone issue list --source waystone:owner/repo --state closed
 waystone issue show <number>
 waystone issue comments <number>
 waystone issue timeline <number>

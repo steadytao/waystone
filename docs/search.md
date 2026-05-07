@@ -23,11 +23,14 @@ the current prototype.
 waystone source default github:steadytao/waymark
 waystone issue search "dns"
 waystone issue search --source github:steadytao/surveyor "tls"
+waystone issue search --source waystone:steadytao/waystone --state closed "release"
 ```
 
 If a default source is configured, search uses it. An explicit `--source` flag
 always wins. Without either, search spans all imported sources and includes a
 source column in text output.
+
+Issue search can also filter by current issue state with `--state open`, `--state closed` or `--state all`.
 
 ## Fields
 
