@@ -14,6 +14,7 @@ The format is based on Keep a Changelog and Waystone intends to follow Semantic 
 - ADR 0017 for migration mapping and source ID preservation
 - `waystone gitlab import group/project` for read-only GitLab project history import
 - ADR 0018 for GitLab read-only import scope and constraints
+- GitHub API errors now preserve token-scope and documentation details where GitHub returns them
 
 ### Changed
 

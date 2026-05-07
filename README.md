@@ -278,6 +278,8 @@ GitHub import currently preserves:
 
 Without `GITHUB_TOKEN`, `waystone github auth login` uses the GitHub OAuth device flow and stores the token in the operating system credential store. Use `OAUTH_CLIENT_ID` or `--client-id` to use your own OAuth app. Use `--plain-file-store` only as an explicit development fallback when the OS credential store is unavailable.
 
+When GitHub rejects an API request, Waystone preserves relevant GitHub error details such as accepted OAuth scopes, token OAuth scopes and documentation URLs where GitHub provides them.
+
 ## GitLab Import
 
 GitLab import currently preserves:
