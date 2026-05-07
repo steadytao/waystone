@@ -71,13 +71,16 @@ waystone issue close <id>
 First local authoring step:
 ```sh
 waystone issue create --source owner/repo --title <title>
+waystone label create --source owner/repo --slug <slug> --name <name>
+waystone issue label add --source owner/repo --issue <number> <label>
+waystone issue label remove --source owner/repo --issue <number> <label>
 waystone issue edit --source owner/repo --issue <number> --title <title>
 waystone issue comment --source owner/repo --issue <number> --body <body>
 waystone issue close --source owner/repo --issue <number>
 waystone issue reopen --source owner/repo --issue <number>
 ```
 
-It creates open local issues under `waystone:` sources only and supports title/body edits plus the first narrow comment, close and reopen lifecycle. Bare `owner/repo` names are accepted for local-authoring commands that do not touch imported forges. Labels, assignment, sync and conflict handling remain deferred.
+It creates open local issues under `waystone:` sources only and supports local labels, title/body edits plus the first narrow comment, close and reopen lifecycle. Bare `owner/repo` names are accepted for local-authoring commands that do not touch imported forges. Assignment, sync and conflict handling remain deferred.
 
 ## Phase 3: Patches And Reviews
 

@@ -66,6 +66,7 @@ type timelineEvent struct {
 	Author string    `json:"author,omitempty"`
 	Title  string    `json:"title,omitempty"`
 	Body   string    `json:"body,omitempty"`
+	Label  string    `json:"label,omitempty"`
 	URL    string    `json:"url,omitempty"`
 	Path   string    `json:"path,omitempty"`
 	Line   int       `json:"line,omitempty"`
@@ -104,6 +105,7 @@ func issueTimeline(issue model.Issue, comments []model.Comment, issueEvents []mo
 			Author: event.Author.Login,
 			Title:  event.Title,
 			Body:   event.Body,
+			Label:  eventLabelDisplay(event),
 		})
 	}
 	if !issue.ClosedAt.IsZero() && !hasTimelineEvent(issueEvents, "issue.closed") {
@@ -202,6 +204,9 @@ func writeTimeline(w io.Writer, kind string, number int, source string, events [
 		if event.Title != "" {
 			writeIndentedField(w, "Title", event.Title)
 		}
+		if event.Label != "" {
+			writeIndentedField(w, "Label", event.Label)
+		}
 		if event.Path != "" {
 			writeIndentedField(w, "Path", event.Path)
 		}
@@ -216,6 +221,17 @@ func writeTimeline(w io.Writer, kind string, number int, source string, events [
 			fmt.Fprintln(w, event.Body)
 		}
 	}
+}
+
+func eventLabelDisplay(event model.IssueEvent) string {
+	if event.LabelName == "" && event.LabelSlug == "" && event.LabelID == "" {
+		return ""
+	}
+	label := model.Label{ID: event.LabelID, Slug: event.LabelSlug, Name: event.LabelName}
+	if label.Name == "" {
+		label.Name = label.ID
+	}
+	return formatLabel(label)
 }
 
 func writeJSONOutput(w io.Writer, value any) error {

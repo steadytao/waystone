@@ -203,6 +203,9 @@ type IssueEvent struct {
 	Author      Author    `json:"author"`
 	Title       string    `json:"title,omitempty"`
 	Body        string    `json:"body,omitempty"`
+	LabelID     string    `json:"label_id,omitempty"`
+	LabelSlug   string    `json:"label_slug,omitempty"`
+	LabelName   string    `json:"label_name,omitempty"`
 	CreatedAt   time.Time `json:"created_at"`
 }
 
@@ -242,11 +245,14 @@ type ReviewComment struct {
 
 type Label struct {
 	Provenance
-	ID          string `json:"id"`
-	SourceID    int64  `json:"source_id"`
-	Name        string `json:"name"`
-	Color       string `json:"color,omitempty"`
-	Description string `json:"description,omitempty"`
+	ID          string    `json:"id"`
+	SourceID    int64     `json:"source_id,omitempty"`
+	Slug        string    `json:"slug,omitempty"`
+	Name        string    `json:"name"`
+	Color       string    `json:"color,omitempty"`
+	Description string    `json:"description,omitempty"`
+	CreatedAt   time.Time `json:"created_at,omitempty"`
+	UpdatedAt   time.Time `json:"updated_at,omitempty"`
 }
 
 type Milestone struct {
