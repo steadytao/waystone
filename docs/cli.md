@@ -199,7 +199,11 @@ waystone issue close --source steadytao/waystone --issue 1
 waystone issue reopen --source steadytao/waystone --issue 1
 waystone issue list
 waystone issue list --source github:steadytao/waymark
+waystone issue list --state open
+waystone issue list --source waystone:steadytao/waystone --state closed
 waystone issue search "edge inspection"
+waystone issue search --state open "edge inspection"
+waystone issue search --source github:steadytao/waymark "edge inspection"
 waystone issue search --field label Tracking
 waystone issue search --field all steadytao
 waystone issue show 15
@@ -214,7 +218,7 @@ These commands refuse imported sources such as `github:owner/repo`.
 
 The first local lifecycle path is intentionally narrow. It supports title/body edits only. It does not assign labels, sync with a forge or publish the issue remotely.
 
-Unfiltered lists include a source column. Detail commands require `--source` when the same issue number exists in multiple imported repositories.
+Unfiltered lists include a source column. Use `--source` to scope list and search output to a single source. Use `--state open`, `--state closed` or `--state all` to filter issue state. Detail commands require `--source` when the same issue number exists in multiple imported repositories.
 
 `issue search` searches title and description/body by default. Use repeated `--field` flags or comma-separated values to search `title`, `description`, `author`, `state`, `label`, `milestone`, `url` or `all`.
 

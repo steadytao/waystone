@@ -1159,6 +1159,36 @@ func TestIssueListSourceFilter(t *testing.T) {
 	}
 }
 
+func TestIssueListStateFilter(t *testing.T) {
+	root := writeTestLedger(t)
+	var stdout, stderr bytes.Buffer
+
+	if err := Run(context.Background(), []string{"issue", "create", "--ledger", root, "--source", "steadytao/waystone", "--title", "closed local issue"}, &stdout, &stderr); err != nil {
+		t.Fatalf("issue create returned error: %v", err)
+	}
+	stdout.Reset()
+	if err := Run(context.Background(), []string{"issue", "close", "--ledger", root, "--source", "steadytao/waystone", "--issue", "1"}, &stdout, &stderr); err != nil {
+		t.Fatalf("issue close returned error: %v", err)
+	}
+	stdout.Reset()
+	if err := Run(context.Background(), []string{"issue", "list", "--ledger", root, "--state", "closed"}, &stdout, &stderr); err != nil {
+		t.Fatalf("issue list returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Issues         1") || !strings.Contains(stdout.String(), "closed local issue") {
+		t.Fatalf("stdout = %q, want closed local issue", stdout.String())
+	}
+	if strings.Contains(stdout.String(), "#1       open") {
+		t.Fatalf("stdout = %q, want open issue excluded", stdout.String())
+	}
+	stdout.Reset()
+	if err := Run(context.Background(), []string{"issue", "list", "--ledger", root, "--source", "github:example/project", "--state", "closed"}, &stdout, &stderr); err != nil {
+		t.Fatalf("issue list returned error with source filter: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Issues         0") || strings.Contains(stdout.String(), "issue") {
+		t.Fatalf("stdout = %q, want no closed issues for selected source", stdout.String())
+	}
+}
+
 func TestIssueSearchCommand(t *testing.T) {
 	root := writeTestLedger(t)
 	var stdout, stderr bytes.Buffer
@@ -1190,6 +1220,29 @@ func TestIssueSearchFields(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "author") || !strings.Contains(stdout.String(), "Issues         1") {
 		t.Fatalf("stdout = %q, want author match", stdout.String())
+	}
+}
+
+func TestIssueSearchSourceAndStateFilters(t *testing.T) {
+	root := writeTestLedger(t)
+	writeTestLedgerSource(t, root, "example", "other")
+	var stdout, stderr bytes.Buffer
+
+	if err := Run(context.Background(), []string{"issue", "search", "--ledger", root, "--source", "github:example/other", "issue"}, &stdout, &stderr); err != nil {
+		t.Fatalf("issue search returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Issues         1") || !strings.Contains(stdout.String(), "#1       open") {
+		t.Fatalf("stdout = %q, want selected source issue", stdout.String())
+	}
+	if strings.Contains(stdout.String(), "github:example/project") {
+		t.Fatalf("stdout = %q, want only selected source", stdout.String())
+	}
+	stdout.Reset()
+	if err := Run(context.Background(), []string{"issue", "search", "--ledger", root, "--state", "closed", "issue"}, &stdout, &stderr); err != nil {
+		t.Fatalf("issue search returned error with state filter: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Issues         0") {
+		t.Fatalf("stdout = %q, want no closed issue matches", stdout.String())
 	}
 }
 

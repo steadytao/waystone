@@ -386,7 +386,12 @@ func runIssueList(args []string, stdout io.Writer) error {
 	fs.SetOutput(io.Discard)
 	root := fs.String("ledger", ".waystone", "Waystone ledger directory")
 	sourceFlag := fs.String("source", "", "filter by source, e.g. github:owner/repo")
+	stateFlag := fs.String("state", "all", "filter by issue state: open, closed or all")
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	state, err := normalizeIssueStateFilter(*stateFlag)
+	if err != nil {
 		return err
 	}
 
@@ -404,6 +409,7 @@ func runIssueList(args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
+	issues = filterIssuesByState(issues, state)
 	writeField(stdout, "Issues", len(issues))
 	fmt.Fprintln(stdout)
 	if sourceSet {
@@ -433,6 +439,31 @@ func nextIssueNumber(reader ledger.Reader, source model.Source) (int, error) {
 		}
 	}
 	return next, nil
+}
+
+func normalizeIssueStateFilter(value string) (string, error) {
+	state := strings.ToLower(strings.TrimSpace(value))
+	switch state {
+	case "", "all":
+		return "all", nil
+	case "open", "closed":
+		return state, nil
+	default:
+		return "", fmt.Errorf("unsupported issue state %q", value)
+	}
+}
+
+func filterIssuesByState(issues []model.Issue, state string) []model.Issue {
+	if state == "all" {
+		return issues
+	}
+	var filtered []model.Issue
+	for _, issue := range issues {
+		if strings.EqualFold(issue.State, state) {
+			filtered = append(filtered, issue)
+		}
+	}
+	return filtered
 }
 
 func parseLocalIssueSource(value string) (model.Source, error) {
@@ -726,6 +757,7 @@ func runIssueSearch(args []string, stdout io.Writer) error {
 	fs.SetOutput(io.Discard)
 	root := fs.String("ledger", ".waystone", "Waystone ledger directory")
 	sourceFlag := fs.String("source", "", "filter by source, e.g. github:owner/repo")
+	stateFlag := fs.String("state", "all", "filter by issue state: open, closed or all")
 	var fields searchFieldsFlag
 	fs.Var(&fields, "field", "field to search: title, description, author, state, label, milestone, url or all")
 	jsonOutput := fs.Bool("json", false, "write JSON output")
@@ -738,6 +770,10 @@ func runIssueSearch(args []string, stdout io.Writer) error {
 	}
 	if fs.NArg() != 1 {
 		return errors.New("usage: waystone issue search [flags] <text>")
+	}
+	state, err := normalizeIssueStateFilter(*stateFlag)
+	if err != nil {
+		return err
 	}
 	reader := ledger.Reader{Root: *root}
 	source, sourceSet, err := resolveOptionalSource(reader, *sourceFlag)
@@ -753,6 +789,7 @@ func runIssueSearch(args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
+	issues = filterIssuesByState(issues, state)
 	selection, err := normalizeSearchFields(fields, issueSearchFields())
 	if err != nil {
 		return err
