@@ -40,6 +40,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  waystone ledger history [flags]")
 	fmt.Fprintln(w, "  waystone ledger show-operation [flags] <operation-id>")
 	fmt.Fprintln(w, "  waystone ledger verify [flags]")
+	fmt.Fprintln(w, "  waystone migrate report --from <source> --to <source>")
 	fmt.Fprintln(w, "  waystone pr list [flags]")
 	fmt.Fprintln(w, "  waystone pr search [flags] <text>")
 	fmt.Fprintln(w, "  waystone pr show [flags] <number>")
@@ -110,6 +111,11 @@ func printLabelUsage(w io.Writer) {
 func printMilestoneUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage:")
 	fmt.Fprintln(w, "  waystone milestone list [flags]")
+}
+
+func printMigrateUsage(w io.Writer) {
+	fmt.Fprintln(w, "Usage:")
+	fmt.Fprintln(w, "  waystone migrate report --from <source> --to <source>")
 }
 
 func printLedgerUsage(w io.Writer) {

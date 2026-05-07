@@ -8,7 +8,9 @@ The format is based on Keep a Changelog and Waystone intends to follow Semantic 
 
 ### Added
 
-Nothing yet
+- Local labelled issue round-trip validation for strict verify, archive export, archive inspect, archive import and imported-ledger verification
+- `waystone migrate report --from <source> --to <source>` for read-only migration preservation and gap reporting
+- ADR 0017 for migration mapping and source ID preservation
 
 ### Changed
 

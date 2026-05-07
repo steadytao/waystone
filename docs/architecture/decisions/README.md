@@ -38,6 +38,7 @@ Current records:
 - [`0014-local-issue-authoring.md`](0014-local-issue-authoring.md)
 - [`0015-local-issue-lifecycle.md`](0015-local-issue-lifecycle.md)
 - [`0016-local-issue-labels.md`](0016-local-issue-labels.md)
+- [`0017-migration-mapping.md`](0017-migration-mapping.md)
 
 ## Notes
 
