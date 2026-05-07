@@ -8,7 +8,10 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/steadytao/waystone/internal/ledger"
 	"github.com/steadytao/waystone/internal/model"
@@ -21,6 +24,8 @@ func runIssue(args []string, stdout, stderr io.Writer) error {
 	}
 
 	switch args[0] {
+	case "create":
+		return runIssueCreate(args[1:], stdout)
 	case "list":
 		return runIssueList(args[1:], stdout)
 	case "search":
@@ -35,6 +40,106 @@ func runIssue(args []string, stdout, stderr io.Writer) error {
 		printIssueUsage(stderr)
 		return fmt.Errorf("unknown issue command %q", args[0])
 	}
+}
+
+func runIssueCreate(args []string, stdout io.Writer) error {
+	fs := flag.NewFlagSet("waystone issue create", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	root := fs.String("ledger", ".waystone", "Waystone ledger directory")
+	sourceFlag := fs.String("source", "", "source for the local issue, e.g. owner/repo or waystone:owner/repo")
+	title := fs.String("title", "", "issue title")
+	body := fs.String("body", "", "issue body")
+	bodyFile := fs.String("body-file", "", "file containing issue body")
+	includeLocal := fs.Bool("local", false, "include local OS user and hostname in operation records")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return errors.New("usage: waystone issue create --source owner/repo --title <title> [--body <body> | --body-file <path>]")
+	}
+	if strings.TrimSpace(*sourceFlag) == "" {
+		return errors.New("issue create requires --source owner/repo")
+	}
+	if strings.TrimSpace(*title) == "" {
+		return errors.New("issue create requires --title")
+	}
+	if *body != "" && *bodyFile != "" {
+		return errors.New("use --body or --body-file, not both")
+	}
+	source, err := parseLocalIssueSource(*sourceFlag)
+	if err != nil {
+		return err
+	}
+	if source.System != "waystone" {
+		return fmt.Errorf("issue create only supports waystone sources, got %s", ledger.SourceSpec(source))
+	}
+	issueBody := *body
+	if *bodyFile != "" {
+		data, err := os.ReadFile(*bodyFile) // #nosec G304 -- body-file is an explicit user-provided input path.
+		if err != nil {
+			return err
+		}
+		issueBody = string(data)
+	}
+
+	startedAt := time.Now().UTC()
+	reader := ledger.Reader{Root: *root}
+	manifestSource := source
+	if current, err := reader.Source(source); err == nil {
+		manifestSource = current
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	number, err := nextIssueNumber(reader, source)
+	if err != nil {
+		return err
+	}
+	operationID := ledger.NewOperationID("issue create", startedAt)
+	manifestSource.Operations = append(manifestSource.Operations, model.SourceOperationRef{
+		ID:        operationID,
+		Command:   "issue create",
+		Path:      ledger.OperationPath(operationID),
+		StartedAt: startedAt,
+	})
+	issue := localIssue(manifestSource, number, *title, issueBody, startedAt)
+	writer := ledger.Writer{Root: *root}
+	diff, err := writer.DiffLocalIssue(issue)
+	if err != nil {
+		return err
+	}
+	ledgerExisted := fileExists(filepath.Join(*root, "ledger.json"))
+	if err := writer.WriteLocalIssue(issue); err != nil {
+		return err
+	}
+	if err := addLedgerMetadataChange(&diff, *root, ledgerExisted); err != nil {
+		return err
+	}
+	finishedAt := time.Now().UTC()
+	operation := model.Operation{
+		ID:         operationID,
+		Command:    "issue create",
+		Args:       append([]string(nil), args...),
+		StartedAt:  startedAt,
+		FinishedAt: finishedAt,
+		Actor:      ledger.LocalActor(gitConfig("user.name"), gitConfig("user.email"), *includeLocal),
+		Input:      map[string]string{"source": ledger.SourceSpec(source)},
+		Output: model.OperationOutput{
+			Ledger:  *root,
+			Created: diff.Created,
+			Updated: diff.Updated,
+			Summary: model.RecordSummary{Issues: 1},
+		},
+		Changes: diff.Changes,
+	}
+	if err := writer.WriteOperation(operation); err != nil {
+		return err
+	}
+
+	fmt.Fprintln(stdout, "Issue created")
+	writeIndentedField(stdout, "Source", ledger.SourceSpec(source))
+	writeIndentedField(stdout, "Number", fmt.Sprintf("#%d", issue.Number))
+	writeIndentedField(stdout, "Title", issue.Title)
+	return nil
 }
 
 func runIssueList(args []string, stdout io.Writer) error {
@@ -75,6 +180,46 @@ func runIssueList(args []string, stdout io.Writer) error {
 		}
 	}
 	return nil
+}
+
+func nextIssueNumber(reader ledger.Reader, source model.Source) (int, error) {
+	issues, err := reader.SourceIssues(source)
+	if err != nil {
+		return 0, err
+	}
+	next := 1
+	for _, issue := range issues {
+		if issue.Number >= next {
+			next = issue.Number + 1
+		}
+	}
+	return next, nil
+}
+
+func parseLocalIssueSource(value string) (model.Source, error) {
+	if !strings.Contains(value, ":") && strings.Count(value, "/") == 1 {
+		value = "waystone:" + value
+	}
+	return ledger.ParseSourceSpec(value)
+}
+
+func localIssue(source model.Source, number int, title, body string, createdAt time.Time) model.Issue {
+	source.URL = ""
+	id := fmt.Sprintf("waystone:issue:%s/%s:%d", source.Owner, source.Repo, number)
+	return model.Issue{
+		Provenance: model.Provenance{
+			ImportID: ledger.SourceSpec(source),
+			Source:   source,
+		},
+		ID:        id,
+		Number:    number,
+		Title:     title,
+		Body:      body,
+		State:     "open",
+		Author:    model.Author{Login: "local"},
+		CreatedAt: createdAt,
+		UpdatedAt: createdAt,
+	}
 }
 
 func runIssueShow(args []string, stdout io.Writer) error {
@@ -130,7 +275,9 @@ func runIssueShow(args []string, stdout io.Writer) error {
 	writeField(stdout, "Title", issue.Title)
 	writeField(stdout, "State", issue.State)
 	writeField(stdout, "Author", issue.Author.Login)
-	writeField(stdout, "URL", issue.OriginalURL)
+	if issue.OriginalURL != "" {
+		writeField(stdout, "URL", issue.OriginalURL)
+	}
 	if issue.Milestone != "" {
 		writeField(stdout, "Milestone", issue.Milestone)
 	}

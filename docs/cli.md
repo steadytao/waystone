@@ -115,7 +115,7 @@ waystone source refresh --sources github:steadytao/waymark,github:steadytao/surv
 
 Source commands expose import manifests: identity, object refs, operation refs, object counts and refresh state.
 
-Source names are repo-specific namespaces. GitHub imports use `github:owner/repo`; `waystone:owner/repo` is reserved for future local Waystone records. Numbers are source-local, so the same issue number can exist in multiple sources without representing the same record.
+Source names are repo-specific namespaces. GitHub imports use `github:owner/repo`; local Waystone records use `waystone:owner/repo`. Numbers are source-local, so the same issue number can exist in multiple sources without representing the same record.
 
 Refresh behaviour:
 - `source refresh` refreshes every source by default
@@ -187,6 +187,9 @@ Safe import verifies the archive manifest, archive shape and ledger operation ch
 ## Issues
 
 ```sh
+waystone issue create --source steadytao/waystone --title "Example issue"
+waystone issue create --source waystone:steadytao/waystone --title "Example issue"
+waystone issue create --source waystone:steadytao/waystone --title "Example issue" --body-file issue.md
 waystone issue list
 waystone issue list --source github:steadytao/waymark
 waystone issue search "edge inspection"
@@ -197,6 +200,12 @@ waystone issue show --with-comments 15
 waystone issue comments 15
 waystone issue timeline 15
 ```
+
+`issue create` creates an open local issue under a `waystone:` source. Because it only writes local Waystone records, bare `owner/repo` source names are treated as `waystone:owner/repo`.
+
+`issue create` refuses imported sources such as `github:owner/repo`.
+
+The first local authoring path is intentionally narrow. It does not create comments, close issues, assign labels, sync with a forge or publish the issue remotely.
 
 Unfiltered lists include a source column. Detail commands require `--source` when the same issue number exists in multiple imported repositories.
 

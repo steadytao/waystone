@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -757,6 +758,163 @@ func TestIssueListCommand(t *testing.T) {
 	for _, want := range []string{"Issues         1", "NUMBER", "#1       open     issue"} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+		}
+	}
+}
+
+func TestIssueCreateCommandCreatesLocalIssue(t *testing.T) {
+	root := t.TempDir()
+	var out bytes.Buffer
+
+	err := Run(context.Background(), []string{"issue", "create", "--ledger", root, "--source", "waystone:steadytao/waystone", "--title", "Example issue", "--body", "Issue body"}, &out, io.Discard)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+
+	for _, want := range []string{"Issue created", "Source           waystone:steadytao/waystone", "Number           #1", "Title            Example issue"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("stdout = %q, want %q", out.String(), want)
+		}
+	}
+
+	reader := ledger.Reader{Root: root}
+	source := model.Source{System: "waystone", Owner: "steadytao", Repo: "waystone"}
+	issue, err := reader.SourceIssue(source, 1)
+	if err != nil {
+		t.Fatalf("SourceIssue returned error: %v", err)
+	}
+	if issue.Title != "Example issue" || issue.Body != "Issue body" || issue.State != "open" {
+		t.Fatalf("issue = %#v", issue)
+	}
+	if issue.Source.System != "waystone" || issue.Source.Owner != "steadytao" || issue.Source.Repo != "waystone" {
+		t.Fatalf("issue source = %#v", issue.Source)
+	}
+
+	manifest, err := reader.Source(source)
+	if err != nil {
+		t.Fatalf("Source returned error: %v", err)
+	}
+	if len(manifest.Objects) != 1 || manifest.Objects[0].Object != "issue" || manifest.Objects[0].Number != 1 {
+		t.Fatalf("source objects = %#v", manifest.Objects)
+	}
+	if len(manifest.Operations) != 1 || manifest.Operations[0].Command != "issue create" {
+		t.Fatalf("source operations = %#v", manifest.Operations)
+	}
+
+	operations, err := reader.Operations()
+	if err != nil {
+		t.Fatalf("Operations returned error: %v", err)
+	}
+	if len(operations) != 1 || operations[0].Command != "issue create" {
+		t.Fatalf("operations = %#v", operations)
+	}
+	if operations[0].Output.Created == 0 || operations[0].Output.Summary.Issues != 1 {
+		t.Fatalf("operation output = %#v", operations[0].Output)
+	}
+	if _, err := reader.VerifyOperations(); err != nil {
+		t.Fatalf("VerifyOperations returned error: %v", err)
+	}
+}
+
+func TestIssueCreateCommandAllocatesNextIssueNumber(t *testing.T) {
+	root := t.TempDir()
+	for _, title := range []string{"First", "Second"} {
+		if err := Run(context.Background(), []string{"issue", "create", "--ledger", root, "--source", "waystone:steadytao/waystone", "--title", title}, io.Discard, io.Discard); err != nil {
+			t.Fatalf("Run returned error: %v", err)
+		}
+	}
+
+	issues, err := (ledger.Reader{Root: root}).SourceIssues(model.Source{System: "waystone", Owner: "steadytao", Repo: "waystone"})
+	if err != nil {
+		t.Fatalf("SourceIssues returned error: %v", err)
+	}
+	if len(issues) != 2 || issues[0].Number != 1 || issues[1].Number != 2 {
+		t.Fatalf("issues = %#v", issues)
+	}
+	source, err := (ledger.Reader{Root: root}).Source(model.Source{System: "waystone", Owner: "steadytao", Repo: "waystone"})
+	if err != nil {
+		t.Fatalf("Source returned error: %v", err)
+	}
+	if len(source.Objects) != 2 || len(source.Operations) != 2 {
+		t.Fatalf("source refs = objects:%#v operations:%#v", source.Objects, source.Operations)
+	}
+}
+
+func TestIssueCreateCommandDefaultsBareSourceToWaystone(t *testing.T) {
+	root := t.TempDir()
+	var out bytes.Buffer
+
+	err := Run(context.Background(), []string{"issue", "create", "--ledger", root, "--source", "steadytao/waystone", "--title", "Bare source"}, &out, io.Discard)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if !strings.Contains(out.String(), "Source           waystone:steadytao/waystone") {
+		t.Fatalf("stdout = %q, want waystone source", out.String())
+	}
+	if _, err := (ledger.Reader{Root: root}).SourceIssue(model.Source{System: "waystone", Owner: "steadytao", Repo: "waystone"}, 1); err != nil {
+		t.Fatalf("SourceIssue returned error: %v", err)
+	}
+}
+
+func TestIssueCreateCommandRefusesImportedSources(t *testing.T) {
+	root := t.TempDir()
+	err := Run(context.Background(), []string{"issue", "create", "--ledger", root, "--source", "github:steadytao/waystone", "--title", "Bad source"}, io.Discard, io.Discard)
+	if err == nil {
+		t.Fatal("Run returned nil error")
+	}
+	if !strings.Contains(err.Error(), "only supports waystone sources") {
+		t.Fatalf("error = %q", err)
+	}
+}
+
+func TestIssueCreateCommandDoesNotTreatSystemPathAsLocalShorthand(t *testing.T) {
+	root := t.TempDir()
+	err := Run(context.Background(), []string{"issue", "create", "--ledger", root, "--source", "github/steadytao/waystone", "--title", "Bad source"}, io.Discard, io.Discard)
+	if err == nil {
+		t.Fatal("Run returned nil error")
+	}
+	if !strings.Contains(err.Error(), "only supports waystone sources") {
+		t.Fatalf("error = %q", err)
+	}
+}
+
+func TestIssueCreateCommandReadsBodyFile(t *testing.T) {
+	root := t.TempDir()
+	bodyFile := filepath.Join(t.TempDir(), "issue.md")
+	if err := os.WriteFile(bodyFile, []byte("File body\n"), 0o600); err != nil {
+		t.Fatalf("write body file: %v", err)
+	}
+
+	if err := Run(context.Background(), []string{"issue", "create", "--ledger", root, "--source", "waystone:steadytao/waystone", "--title", "Body file", "--body-file", bodyFile}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+
+	issue, err := (ledger.Reader{Root: root}).SourceIssue(model.Source{System: "waystone", Owner: "steadytao", Repo: "waystone"}, 1)
+	if err != nil {
+		t.Fatalf("SourceIssue returned error: %v", err)
+	}
+	if issue.Body != "File body\n" {
+		t.Fatalf("body = %q", issue.Body)
+	}
+}
+
+func TestIssueCreateCommandWorksWithExistingIssueViews(t *testing.T) {
+	root := t.TempDir()
+	if err := Run(context.Background(), []string{"issue", "create", "--ledger", root, "--source", "waystone:steadytao/waystone", "--title", "Find me"}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+
+	for _, command := range [][]string{
+		{"issue", "list", "--ledger", root, "--source", "waystone:steadytao/waystone"},
+		{"issue", "show", "--ledger", root, "--source", "waystone:steadytao/waystone", "1"},
+		{"issue", "search", "--ledger", root, "--source", "waystone:steadytao/waystone", "Find"},
+	} {
+		var out bytes.Buffer
+		if err := Run(context.Background(), command, &out, io.Discard); err != nil {
+			t.Fatalf("Run(%v) returned error: %v", command, err)
+		}
+		if !strings.Contains(out.String(), "Find me") {
+			t.Fatalf("stdout = %q, want local issue title", out.String())
 		}
 	}
 }
