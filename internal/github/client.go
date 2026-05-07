@@ -214,14 +214,7 @@ func (c *Client) get(ctx context.Context, path string, query url.Values, out any
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		var githubErr struct {
-			Message string `json:"message"`
-		}
-		_ = json.NewDecoder(resp.Body).Decode(&githubErr)
-		if githubErr.Message == "" {
-			githubErr.Message = resp.Status
-		}
-		return fmt.Errorf("github request failed for %s: %s", path, githubErr.Message)
+		return fmt.Errorf("github request failed for %s: %s", path, githubErrorMessage(resp))
 	}
 
 	return json.NewDecoder(resp.Body).Decode(out)
@@ -255,14 +248,7 @@ func (c *Client) getOptional(ctx context.Context, path string, query url.Values,
 		return false, nil
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		var githubErr struct {
-			Message string `json:"message"`
-		}
-		_ = json.NewDecoder(resp.Body).Decode(&githubErr)
-		if githubErr.Message == "" {
-			githubErr.Message = resp.Status
-		}
-		return false, fmt.Errorf("github request failed for %s: %s", path, githubErr.Message)
+		return false, fmt.Errorf("github request failed for %s: %s", path, githubErrorMessage(resp))
 	}
 
 	return true, json.NewDecoder(resp.Body).Decode(out)
@@ -298,15 +284,31 @@ func (c *Client) getMaybe(ctx context.Context, path string, query url.Values, ou
 		_, _ = io.Copy(io.Discard, resp.Body)
 		return false, resp.StatusCode, nil
 	default:
-		var githubErr struct {
-			Message string `json:"message"`
-		}
-		_ = json.NewDecoder(resp.Body).Decode(&githubErr)
-		if githubErr.Message == "" {
-			githubErr.Message = resp.Status
-		}
-		return false, resp.StatusCode, fmt.Errorf("github request failed for %s: %s", path, githubErr.Message)
+		return false, resp.StatusCode, fmt.Errorf("github request failed for %s: %s", path, githubErrorMessage(resp))
 	}
+}
+
+func githubErrorMessage(resp *http.Response) string {
+	var githubErr struct {
+		Message          string `json:"message"`
+		DocumentationURL string `json:"documentation_url"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&githubErr)
+
+	message := githubErr.Message
+	if message == "" {
+		message = resp.Status
+	}
+	if acceptedScopes := resp.Header.Get("X-Accepted-OAuth-Scopes"); acceptedScopes != "" {
+		message += "; accepted OAuth scopes: " + acceptedScopes
+	}
+	if tokenScopes := resp.Header.Get("X-OAuth-Scopes"); tokenScopes != "" {
+		message += "; token OAuth scopes: " + tokenScopes
+	}
+	if githubErr.DocumentationURL != "" {
+		message += "; documentation: " + githubErr.DocumentationURL
+	}
+	return message
 }
 
 func decodeContent(item ghContent) ([]byte, error) {

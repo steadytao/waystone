@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -190,6 +191,35 @@ func TestAuthenticatedUser(t *testing.T) {
 	}
 	if login != "steadytao" {
 		t.Fatalf("login = %q, want steadytao", login)
+	}
+}
+
+func TestImportRepositoryReportsRequiredTokenScopes(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Accepted-OAuth-Scopes", "repo")
+		w.Header().Set("X-OAuth-Scopes", "read:user")
+		w.WriteHeader(http.StatusForbidden)
+		writeJSON(t, w, map[string]string{
+			"message":           "Resource not accessible by personal access token",
+			"documentation_url": "https://docs.github.com/rest",
+		})
+	}))
+	defer server.Close()
+
+	_, err := NewClient(server.URL, "token", time.Second).ImportRepository(context.Background(), "example", "project")
+	if err == nil {
+		t.Fatal("ImportRepository returned nil error, want insufficient scope error")
+	}
+	for _, want := range []string{
+		"Resource not accessible by personal access token",
+		"accepted OAuth scopes: repo",
+		"token OAuth scopes: read:user",
+		"https://docs.github.com/rest",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("ImportRepository error = %q, want %q", err.Error(), want)
+		}
 	}
 }
 

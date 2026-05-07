@@ -53,6 +53,8 @@ Credential rules:
 - the OS credential store is used by default
 - `--plain-file-store` is only a development fallback
 
+GitHub API errors preserve accepted OAuth scopes, token OAuth scopes and documentation URLs where GitHub returns them. This is useful when a token is valid but lacks access to a required repository or API surface.
+
 ## GitHub Audit, Import And Refresh
 
 ```sh
