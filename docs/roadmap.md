@@ -96,6 +96,13 @@ waystone migrate report --from github:owner/repo --to waystone:owner/repo
 
 The first migration report is read-only. It counts imported records, local continuation records, identity handling and known gaps such as attachments, user mapping and CI history.
 
+First plan command:
+```sh
+waystone migrate plan --from github:owner/repo --to waystone:owner/repo --numbering-strategy preserve-source-numbering --out waystone-migration-plan.json
+```
+
+The first migration plan is a saved read-only JSON artefact. It records how source records would map without contacting or mutating a target forge.
+
 I am keeping source IDs immutable. Target IDs are projections, not rewritten source facts.
 
 ## Phase 4: Patches And Reviews

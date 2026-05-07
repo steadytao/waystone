@@ -162,16 +162,22 @@ waystone audit show <audit-id> --json
 
 Audit browse commands read locally persisted audit records. They do not contact GitHub.
 
-## Migration Reports
+## Migration Reports And Plans
 
 ```sh
 waystone migrate report --from github:steadytao/waymark --to waystone:steadytao/waymark
+waystone migrate report --from github:steadytao/waymark --to waystone:steadytao/waymark --numbering-strategy preserve-source-numbering
 waystone migrate report --from github:steadytao/waymark --to waystone:steadytao/waymark --json
+waystone migrate plan --from github:steadytao/waymark --to waystone:steadytao/waymark --numbering-strategy preserve-source-numbering --out waystone-migration-plan.json
 ```
 
 `migrate report` reads local ledger data only. It does not contact a forge, create target records or write operation records.
 
 The report counts preserved source records, local continuation records and known migration gaps. Original source IDs remain immutable ledger facts. Target IDs are not assigned by the read-only report.
+
+`migrate plan` writes a deterministic JSON artefact describing how source records would map under the selected numbering strategy. The first implementation supports only `preserve-source-numbering`.
+
+The migration plan uses safe read-only defaults: source authors, labels, milestones, states, timestamps and comments are preserved as source evidence; attachments are link-only; unsupported records are reported; target writes are disabled.
 
 ## Archive Export And Import
 

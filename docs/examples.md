@@ -109,6 +109,13 @@ waystone migrate report --from github:steadytao/waymark --to waystone:steadytao/
 
 The report counts preserved source records, local continuation records and known gaps. It does not contact a forge or write target records.
 
+Write a read-only migration plan:
+```sh
+waystone migrate plan --from github:steadytao/waymark --to waystone:steadytao/waystone --numbering-strategy preserve-source-numbering --out waystone-migration-plan.json
+```
+
+The plan records how source records would map. It does not create target records.
+
 ## Export The Ledger
 
 Export the full ledger:

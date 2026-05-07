@@ -10,11 +10,12 @@ The format is based on Keep a Changelog and Waystone intends to follow Semantic 
 
 - Local labelled issue round-trip validation for strict verify, archive export, archive inspect, archive import and imported-ledger verification
 - `waystone migrate report --from <source> --to <source>` for read-only migration preservation and gap reporting
+- `waystone migrate plan --from <source> --to <source> --numbering-strategy preserve-source-numbering --out <file>` for saved read-only migration plans
 - ADR 0017 for migration mapping and source ID preservation
 
 ### Changed
 
-Nothing yet
+- Renamed the migration report strategy flag to `--numbering-strategy`
 
 ### Fixed
 
