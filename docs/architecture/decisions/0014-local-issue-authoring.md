@@ -18,7 +18,7 @@ Waystone will support source-local issue creation under the `waystone:<owner>/<r
 
 Local issue creation will not write to imported forge sources. Imported sources such as `github:<owner>/<repo>` remain read-only evidence from the source forge.
 
-The first implementation supports creating open local issues only. Comments, closing, labels, assignment, sync and merge or conflict handling are deferred.
+The first implementation supports creating open local issues only. Later local lifecycle commands may add comments, close and reopen behaviour without changing the rule that imported forge sources remain read-only.
 
 A local issue is stored as deterministic JSON under `.waystone/objects/waystone/<owner>/<repo>/issues/`.
 

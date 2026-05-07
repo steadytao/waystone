@@ -78,6 +78,9 @@ func printGitHubAuthUsage(w io.Writer) {
 func printIssueUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage:")
 	fmt.Fprintln(w, "  waystone issue create --source owner/repo --title <title> [flags]")
+	fmt.Fprintln(w, "  waystone issue comment --source owner/repo --issue <number> [flags]")
+	fmt.Fprintln(w, "  waystone issue close --source owner/repo --issue <number> [flags]")
+	fmt.Fprintln(w, "  waystone issue reopen --source owner/repo --issue <number> [flags]")
 	fmt.Fprintln(w, "  waystone issue list [flags]")
 	fmt.Fprintln(w, "  waystone issue search [flags] <text>")
 	fmt.Fprintln(w, "  waystone issue show [flags] <number>")

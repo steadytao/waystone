@@ -35,6 +35,8 @@ Current records:
 - [`0011-source-manifest-signing.md`](0011-source-manifest-signing.md)
 - [`0012-archive-manifest-signing.md`](0012-archive-manifest-signing.md)
 - [`0013-local-identity-trust-policy.md`](0013-local-identity-trust-policy.md)
+- [`0014-local-issue-authoring.md`](0014-local-issue-authoring.md)
+- [`0015-local-issue-lifecycle.md`](0015-local-issue-lifecycle.md)
 
 ## Notes
 

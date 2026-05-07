@@ -32,7 +32,9 @@ func writeIssueComments(w io.Writer, number int, comments []model.Comment) {
 		writeIndentedField(w, "Source", ledger.SourceSpec(comment.Source))
 		writeIndentedField(w, "Author", comment.Author.Login)
 		writeIndentedField(w, "Created", comment.CreatedAt.Format(time.RFC3339))
-		writeIndentedField(w, "URL", comment.OriginalURL)
+		if comment.OriginalURL != "" {
+			writeIndentedField(w, "URL", comment.OriginalURL)
+		}
 		if comment.Body != "" {
 			fmt.Fprintln(w)
 			fmt.Fprintln(w, comment.Body)
@@ -69,7 +71,7 @@ type timelineEvent struct {
 	Line   int       `json:"line,omitempty"`
 }
 
-func issueTimeline(issue model.Issue, comments []model.Comment) []timelineEvent {
+func issueTimeline(issue model.Issue, comments []model.Comment, issueEvents []model.IssueEvent) []timelineEvent {
 	events := []timelineEvent{
 		{
 			Time:   issue.CreatedAt,
@@ -89,7 +91,14 @@ func issueTimeline(issue model.Issue, comments []model.Comment) []timelineEvent 
 			URL:    comment.OriginalURL,
 		})
 	}
-	if !issue.ClosedAt.IsZero() {
+	for _, event := range issueEvents {
+		events = append(events, timelineEvent{
+			Time:   event.CreatedAt,
+			Type:   event.Type,
+			Author: event.Author.Login,
+		})
+	}
+	if !issue.ClosedAt.IsZero() && !hasTimelineEvent(issueEvents, "issue.closed") {
 		events = append(events, timelineEvent{
 			Time:   issue.ClosedAt,
 			Type:   "issue.closed",
@@ -98,6 +107,15 @@ func issueTimeline(issue model.Issue, comments []model.Comment) []timelineEvent 
 		})
 	}
 	return sortTimeline(events)
+}
+
+func hasTimelineEvent(events []model.IssueEvent, eventType string) bool {
+	for _, event := range events {
+		if event.Type == eventType {
+			return true
+		}
+	}
+	return false
 }
 
 func pullRequestTimeline(pr model.PullRequest, conversationComments []model.Comment, reviewComments []model.ReviewComment) []timelineEvent {

@@ -53,7 +53,7 @@ The current prototype includes:
 - issue and pull request browsing
 - comment and timeline views
 - label and milestone listing
-- local issue creation under `waystone:` sources
+- local issue creation, comments, close and reopen under `waystone:` sources
 - local issue and pull request search
 - operation records for ledger-changing and verification commands
 - object hashes and strict ledger verification
@@ -136,6 +136,9 @@ Browse imported records:
 ```bash
 waystone issue list
 waystone issue create --source steadytao/waystone --title "Example local issue"
+waystone issue comment --source steadytao/waystone --issue 1 --body "Example comment"
+waystone issue close --source steadytao/waystone --issue 1
+waystone issue reopen --source steadytao/waystone --issue 1
 waystone issue show 15
 waystone issue comments 15
 waystone pr list
@@ -181,6 +184,9 @@ waystone source status
 
 waystone issue list
 waystone issue create --source owner/repo --title <title>
+waystone issue comment --source owner/repo --issue <number>
+waystone issue close --source owner/repo --issue <number>
+waystone issue reopen --source owner/repo --issue <number>
 waystone issue search <text>
 waystone issue show <number>
 waystone issue comments <number>
@@ -282,6 +288,7 @@ Core documents:
 - [docs/cli.md](docs/cli.md), command reference
 - [docs/examples.md](docs/examples.md), common command workflows
 - [docs/self-import.md](docs/self-import.md), self-import validation flow
+- [docs/local-issue-ledger.md](docs/local-issue-ledger.md), local Waystone issue records
 - [docs/ledger-format.md](docs/ledger-format.md), `.waystone/` layout and archive model
 - [docs/operations.md](docs/operations.md), operation records and command history
 - [docs/privacy.md](docs/privacy.md), token and actor metadata handling

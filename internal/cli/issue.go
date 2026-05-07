@@ -26,6 +26,12 @@ func runIssue(args []string, stdout, stderr io.Writer) error {
 	switch args[0] {
 	case "create":
 		return runIssueCreate(args[1:], stdout)
+	case "comment":
+		return runIssueComment(args[1:], stdout)
+	case "close":
+		return runIssueStateChange(args[1:], stdout, "close")
+	case "reopen":
+		return runIssueStateChange(args[1:], stdout, "reopen")
 	case "list":
 		return runIssueList(args[1:], stdout)
 	case "search":
@@ -142,6 +148,155 @@ func runIssueCreate(args []string, stdout io.Writer) error {
 	return nil
 }
 
+func runIssueComment(args []string, stdout io.Writer) error {
+	fs := flag.NewFlagSet("waystone issue comment", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	root := fs.String("ledger", ".waystone", "Waystone ledger directory")
+	sourceFlag := fs.String("source", "", "source for the local issue, e.g. owner/repo or waystone:owner/repo")
+	issueFlag := fs.Int("issue", 0, "issue number")
+	body := fs.String("body", "", "comment body")
+	bodyFile := fs.String("body-file", "", "file containing comment body")
+	includeLocal := fs.Bool("local", false, "include local OS user and hostname in operation records")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return errors.New("usage: waystone issue comment --source owner/repo --issue <number> [--body <body> | --body-file <path>]")
+	}
+	if strings.TrimSpace(*sourceFlag) == "" {
+		return errors.New("issue comment requires --source owner/repo")
+	}
+	if *issueFlag <= 0 {
+		return errors.New("issue comment requires --issue <number>")
+	}
+	if *body != "" && *bodyFile != "" {
+		return errors.New("use --body or --body-file, not both")
+	}
+	commentBody := *body
+	if *bodyFile != "" {
+		data, err := os.ReadFile(*bodyFile) // #nosec G304 -- body-file is an explicit user-provided input path.
+		if err != nil {
+			return err
+		}
+		commentBody = string(data)
+	}
+	if strings.TrimSpace(commentBody) == "" {
+		return errors.New("issue comment requires --body or --body-file")
+	}
+
+	startedAt := time.Now().UTC()
+	reader := ledger.Reader{Root: *root}
+	source, issue, err := localMutableIssue(reader, *sourceFlag, *issueFlag)
+	if err != nil {
+		return err
+	}
+	comments, err := reader.SourceComments(source, issue.Number)
+	if err != nil {
+		return err
+	}
+	operationID := ledger.NewOperationID("issue comment", startedAt)
+	issue.Source.Operations = append(issue.Source.Operations, sourceOperationRef(operationID, "issue comment", startedAt))
+	issue.Comments = len(comments) + 1
+	issue.UpdatedAt = startedAt
+	comment := localIssueComment(issue.Source, issue.Number, len(comments)+1, commentBody, startedAt)
+	writer := ledger.Writer{Root: *root}
+	diff, err := writer.DiffLocalIssueComment(issue, comment)
+	if err != nil {
+		return err
+	}
+	ledgerExisted := fileExists(filepath.Join(*root, "ledger.json"))
+	if err := writer.WriteLocalIssueComment(issue, comment); err != nil {
+		return err
+	}
+	if err := addLedgerMetadataChange(&diff, *root, ledgerExisted); err != nil {
+		return err
+	}
+	operation := localIssueOperation(operationID, "issue comment", args, startedAt, time.Now().UTC(), *root, source, diff, *includeLocal)
+	operation.Output.Summary.Comments = 1
+	if err := writer.WriteOperation(operation); err != nil {
+		return err
+	}
+
+	fmt.Fprintln(stdout, "Comment created")
+	writeIndentedField(stdout, "Source", ledger.SourceSpec(source))
+	writeIndentedField(stdout, "Issue", fmt.Sprintf("#%d", issue.Number))
+	return nil
+}
+
+func runIssueStateChange(args []string, stdout io.Writer, action string) error {
+	fs := flag.NewFlagSet("waystone issue "+action, flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	root := fs.String("ledger", ".waystone", "Waystone ledger directory")
+	sourceFlag := fs.String("source", "", "source for the local issue, e.g. owner/repo or waystone:owner/repo")
+	issueFlag := fs.Int("issue", 0, "issue number")
+	includeLocal := fs.Bool("local", false, "include local OS user and hostname in operation records")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return fmt.Errorf("usage: waystone issue %s --source owner/repo --issue <number>", action)
+	}
+	if strings.TrimSpace(*sourceFlag) == "" {
+		return fmt.Errorf("issue %s requires --source owner/repo", action)
+	}
+	if *issueFlag <= 0 {
+		return fmt.Errorf("issue %s requires --issue <number>", action)
+	}
+
+	startedAt := time.Now().UTC()
+	reader := ledger.Reader{Root: *root}
+	source, issue, err := localMutableIssue(reader, *sourceFlag, *issueFlag)
+	if err != nil {
+		return err
+	}
+	command := "issue " + action
+	eventType := "issue.closed"
+	if action == "close" {
+		if issue.State == "closed" {
+			return fmt.Errorf("issue %d is already closed", issue.Number)
+		}
+		issue.State = "closed"
+		issue.ClosedAt = startedAt
+	} else {
+		if issue.State == "open" {
+			return fmt.Errorf("issue %d is already open", issue.Number)
+		}
+		issue.State = "open"
+		issue.ClosedAt = time.Time{}
+		eventType = "issue.reopened"
+	}
+	operationID := ledger.NewOperationID(command, startedAt)
+	issue.Source.Operations = append(issue.Source.Operations, sourceOperationRef(operationID, command, startedAt))
+	issue.UpdatedAt = startedAt
+	event := localIssueEvent(issue.Source, issue.Number, eventType, startedAt)
+	writer := ledger.Writer{Root: *root}
+	diff, err := writer.DiffLocalIssueEvent(issue, event)
+	if err != nil {
+		return err
+	}
+	ledgerExisted := fileExists(filepath.Join(*root, "ledger.json"))
+	if err := writer.WriteLocalIssueEvent(issue, event); err != nil {
+		return err
+	}
+	if err := addLedgerMetadataChange(&diff, *root, ledgerExisted); err != nil {
+		return err
+	}
+	operation := localIssueOperation(operationID, command, args, startedAt, time.Now().UTC(), *root, source, diff, *includeLocal)
+	operation.Output.Summary.Issues = 1
+	if err := writer.WriteOperation(operation); err != nil {
+		return err
+	}
+
+	if action == "close" {
+		fmt.Fprintln(stdout, "Issue closed")
+	} else {
+		fmt.Fprintln(stdout, "Issue reopened")
+	}
+	writeIndentedField(stdout, "Source", ledger.SourceSpec(source))
+	writeIndentedField(stdout, "Issue", fmt.Sprintf("#%d", issue.Number))
+	return nil
+}
+
 func runIssueList(args []string, stdout io.Writer) error {
 	fs := flag.NewFlagSet("waystone issue list", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
@@ -219,6 +374,88 @@ func localIssue(source model.Source, number int, title, body string, createdAt t
 		Author:    model.Author{Login: "local"},
 		CreatedAt: createdAt,
 		UpdatedAt: createdAt,
+	}
+}
+
+func localMutableIssue(reader ledger.Reader, sourceValue string, issueNumber int) (model.Source, model.Issue, error) {
+	source, err := parseLocalIssueSource(sourceValue)
+	if err != nil {
+		return model.Source{}, model.Issue{}, err
+	}
+	if source.System != "waystone" {
+		return model.Source{}, model.Issue{}, fmt.Errorf("issue lifecycle only supports waystone sources, got %s", ledger.SourceSpec(source))
+	}
+	manifestSource, err := reader.Source(source)
+	if err != nil {
+		return model.Source{}, model.Issue{}, err
+	}
+	issue, err := reader.SourceIssue(source, issueNumber)
+	if err != nil {
+		return model.Source{}, model.Issue{}, err
+	}
+	issue.Source = manifestSource
+	issue.Provenance.Source = manifestSource
+	return source, issue, nil
+}
+
+func localIssueComment(source model.Source, issueNumber, commentNumber int, body string, createdAt time.Time) model.Comment {
+	source.URL = ""
+	id := fmt.Sprintf("waystone:comment:%s/%s:%d:%d", source.Owner, source.Repo, issueNumber, commentNumber)
+	return model.Comment{
+		Provenance: model.Provenance{
+			ImportID: ledger.SourceSpec(source),
+			Source:   source,
+		},
+		ID:          id,
+		IssueNumber: issueNumber,
+		Author:      model.Author{Login: "local"},
+		Body:        body,
+		CreatedAt:   createdAt,
+		UpdatedAt:   createdAt,
+	}
+}
+
+func localIssueEvent(source model.Source, issueNumber int, eventType string, createdAt time.Time) model.IssueEvent {
+	source.URL = ""
+	id := fmt.Sprintf("waystone:event:%s/%s:%d:%s:%s", source.Owner, source.Repo, issueNumber, eventType, createdAt.Format("20060102T150405.000000000Z"))
+	return model.IssueEvent{
+		Provenance: model.Provenance{
+			ImportID: ledger.SourceSpec(source),
+			Source:   source,
+		},
+		ID:          id,
+		IssueNumber: issueNumber,
+		Type:        eventType,
+		Author:      model.Author{Login: "local"},
+		CreatedAt:   createdAt,
+	}
+}
+
+func sourceOperationRef(id, command string, startedAt time.Time) model.SourceOperationRef {
+	return model.SourceOperationRef{
+		ID:        id,
+		Command:   command,
+		Path:      ledger.OperationPath(id),
+		StartedAt: startedAt,
+	}
+}
+
+func localIssueOperation(id, command string, args []string, startedAt, finishedAt time.Time, root string, source model.Source, diff ledger.Diff, includeLocal bool) model.Operation {
+	return model.Operation{
+		ID:         id,
+		Command:    command,
+		Args:       append([]string(nil), args...),
+		StartedAt:  startedAt,
+		FinishedAt: finishedAt,
+		Actor:      ledger.LocalActor(gitConfig("user.name"), gitConfig("user.email"), includeLocal),
+		Input:      map[string]string{"source": ledger.SourceSpec(source)},
+		Output: model.OperationOutput{
+			Ledger:    root,
+			Created:   diff.Created,
+			Updated:   diff.Updated,
+			Unchanged: diff.Unchanged,
+		},
+		Changes: diff.Changes,
 	}
 }
 
@@ -372,7 +609,11 @@ func runIssueTimeline(args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	events := issueTimeline(issue, comments)
+	issueEvents, err := reader.SourceIssueEvents(issue.Source, number)
+	if err != nil {
+		return err
+	}
+	events := issueTimeline(issue, comments, issueEvents)
 	if *jsonOutput {
 		return writeJSONOutput(stdout, events)
 	}

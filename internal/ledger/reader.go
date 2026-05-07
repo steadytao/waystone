@@ -210,6 +210,14 @@ func (r Reader) SourceComments(source model.Source, issueNumber int) ([]model.Co
 	return filterComments(comments, issueNumber), nil
 }
 
+func (r Reader) SourceIssueEvents(source model.Source, issueNumber int) ([]model.IssueEvent, error) {
+	events, err := readDirJSON[model.IssueEvent](filepath.Join(r.Root, sourceScopedPath(source), "events"))
+	if err != nil {
+		return nil, err
+	}
+	return filterIssueEvents(events, issueNumber), nil
+}
+
 func (r Reader) PullRequests() ([]model.PullRequest, error) {
 	prs, err := readObjectTreeJSON[model.PullRequest](r.Root, "pull_requests")
 	if err != nil {
@@ -456,6 +464,26 @@ func sortComments(comments []model.Comment) []model.Comment {
 		return comments[i].CreatedAt.Before(comments[j].CreatedAt)
 	})
 	return comments
+}
+
+func filterIssueEvents(events []model.IssueEvent, issueNumber int) []model.IssueEvent {
+	var filtered []model.IssueEvent
+	for _, event := range events {
+		if event.IssueNumber == issueNumber {
+			filtered = append(filtered, event)
+		}
+	}
+	return sortIssueEvents(filtered)
+}
+
+func sortIssueEvents(events []model.IssueEvent) []model.IssueEvent {
+	sort.Slice(events, func(i, j int) bool {
+		if events[i].CreatedAt.Equal(events[j].CreatedAt) {
+			return events[i].ID < events[j].ID
+		}
+		return events[i].CreatedAt.Before(events[j].CreatedAt)
+	})
+	return events
 }
 
 func filterReviewComments(comments []model.ReviewComment, pullRequestNumber int) []model.ReviewComment {

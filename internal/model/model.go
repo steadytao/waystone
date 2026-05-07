@@ -195,6 +195,15 @@ type Comment struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
+type IssueEvent struct {
+	Provenance
+	ID          string    `json:"id"`
+	IssueNumber int       `json:"issue_number"`
+	Type        string    `json:"type"`
+	Author      Author    `json:"author"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
 type PullRequest struct {
 	Provenance
 	ID          string    `json:"id"`

@@ -91,8 +91,20 @@ func (w Writer) DiffGitHubAudit(audit model.GitHubAudit) (Diff, error) {
 }
 
 func (w Writer) DiffLocalIssue(issue model.Issue) (Diff, error) {
+	return w.diffTargets(localIssueTargets(issue))
+}
+
+func (w Writer) DiffLocalIssueComment(issue model.Issue, comment model.Comment) (Diff, error) {
+	return w.diffTargets(localIssueCommentTargets(issue, comment))
+}
+
+func (w Writer) DiffLocalIssueEvent(issue model.Issue, event model.IssueEvent) (Diff, error) {
+	return w.diffTargets(localIssueEventTargets(issue, event))
+}
+
+func (w Writer) diffTargets(targets []writeTarget) (Diff, error) {
 	var diff Diff
-	for _, target := range localIssueTargets(issue) {
+	for _, target := range targets {
 		changeType, err := w.diffTarget(target)
 		if err != nil {
 			return Diff{}, err
