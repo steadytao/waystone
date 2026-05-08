@@ -40,6 +40,7 @@ Current records:
 - [`0016-local-issue-labels.md`](0016-local-issue-labels.md)
 - [`0017-migration-mapping.md`](0017-migration-mapping.md)
 - [`0018-gitlab-read-only-import.md`](0018-gitlab-read-only-import.md)
+- [`0019-forgejo-gitea-read-only-import.md`](0019-forgejo-gitea-read-only-import.md)
 
 ## Notes
 

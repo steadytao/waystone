@@ -1,4 +1,4 @@
-# 0016: Local issue labels
+# Local Issue Labels
 
 <!-- ![Proposed](https://img.shields.io/badge/status-proposed-informational?style=for-the-badge) -->
 ![Accepted](https://img.shields.io/badge/status-accepted-brightgreen?style=for-the-badge)

@@ -26,6 +26,8 @@ Waystone is experimental research software. It is not ready for production use.
 - [Quick Start](#quick-start)
 - [Command Surface](#command-surface)
 - [Ledger Model](#ledger-model)
+- [Forgejo Import](#forgejo-import)
+- [Gitea Import](#gitea-import)
 - [GitHub Import](#github-import)
 - [GitLab Import](#gitlab-import)
 - [Archive Import and Export](#archive-import-and-export)
@@ -49,6 +51,8 @@ The current prototype includes:
 - `GITHUB_TOKEN` override support
 - GitHub repository import
 - GitLab read-only project import
+- Forgejo read-only repository import
+- Gitea read-only repository import
 - GitHub exit-readiness audit for workflow, policy, release and project-metadata surfaces
 - local ledger storage under `.waystone/`
 - source manifests for imported repositories
@@ -170,6 +174,8 @@ waystone github audit owner/repo
 waystone github import owner/repo
 waystone github refresh owner/repo
 waystone gitlab import group/project
+waystone forgejo import owner/repo
+waystone gitea import owner/repo
 
 waystone identity init
 waystone identity list
@@ -260,6 +266,42 @@ Sources are repo-specific namespaces. GitHub imports use `github:owner/repo`; `w
 `waystone migrate plan` writes a read-only JSON plan describing how source records would map under `preserve-source-numbering`. It does not contact or mutate a target forge.
 
 See [docs/ledger-format.md](docs/ledger-format.md) and [docs/operations.md](docs/operations.md).
+
+## Forgejo Import
+
+Forgejo import currently preserves:
+- repository metadata
+- issues
+- issue comments
+- pull requests
+- pull request conversation comments
+- labels
+- milestones
+- releases
+- source manifests
+- import operation records
+
+Forgejo imports use `forgejo:owner/repo` source namespaces. `FORGEJO_TOKEN` is used when present. Tokens are never persisted by Waystone.
+
+The first Forgejo import is read-only. It does not use Gitea credentials and does not write `gitea:` provenance. It does not support export, sync, federation, Actions/CI import or Codeberg-specific product assumptions.
+
+## Gitea Import
+
+Gitea import currently preserves:
+- repository metadata
+- issues
+- issue comments
+- pull requests
+- pull request conversation comments
+- labels
+- milestones
+- releases
+- source manifests
+- import operation records
+
+Gitea imports use `gitea:owner/repo` source namespaces. `GITEA_TOKEN` is used when present. Tokens are never persisted by Waystone.
+
+The first Gitea import is read-only. It does not use Forgejo credentials and does not write `forgejo:` provenance. It does not support export, sync, federation or Actions/CI import.
 
 ## GitHub Import
 

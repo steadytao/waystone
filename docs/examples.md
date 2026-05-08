@@ -24,6 +24,16 @@ Import a GitLab project:
 waystone gitlab import example/project
 ```
 
+Import a Forgejo repository:
+```sh
+waystone forgejo import example/project
+```
+
+Import a Gitea repository:
+```sh
+waystone gitea import example/project
+```
+
 Set the imported repository as the default browsing source:
 ```sh
 waystone source default github:steadytao/waymark

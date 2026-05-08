@@ -12,6 +12,8 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage:")
 	fmt.Fprintln(w, "  waystone audit list [flags]")
 	fmt.Fprintln(w, "  waystone audit show [flags] <audit>")
+	fmt.Fprintln(w, "  waystone forgejo import [flags] owner/repo")
+	fmt.Fprintln(w, "  waystone gitea import [flags] owner/repo")
 	fmt.Fprintln(w, "  waystone github auth login [flags]")
 	fmt.Fprintln(w, "  waystone github auth logout [flags]")
 	fmt.Fprintln(w, "  waystone github audit [flags] owner/repo")
@@ -70,6 +72,16 @@ func printGitHubUsage(w io.Writer) {
 	fmt.Fprintln(w, "  waystone github audit [flags] owner/repo")
 	fmt.Fprintln(w, "  waystone github import [flags] owner/repo")
 	fmt.Fprintln(w, "  waystone github refresh [flags] owner/repo")
+}
+
+func printForgejoUsage(w io.Writer) {
+	fmt.Fprintln(w, "Usage:")
+	fmt.Fprintln(w, "  waystone forgejo import [flags] owner/repo")
+}
+
+func printGiteaUsage(w io.Writer) {
+	fmt.Fprintln(w, "Usage:")
+	fmt.Fprintln(w, "  waystone gitea import [flags] owner/repo")
 }
 
 func printGitHubAuthUsage(w io.Writer) {

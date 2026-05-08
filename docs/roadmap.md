@@ -107,11 +107,13 @@ I am keeping source IDs immutable. Target IDs are projections, not rewritten sou
 
 ## Phase 4: Patches And Reviews
 
-Before this phase, Waystone should add GitLab read-only import and Forgejo/Gitea read-only import. Those imports are migration-model proof points, not separate product phases.
+Before this phase, Waystone should prove cross-source migration reports across GitHub, GitLab and Forgejo/Gitea imports.
 
-Current GitLab import command:
+Current second-forge import commands:
 ```sh
 waystone gitlab import group/project
+waystone forgejo import owner/repo
+waystone gitea import owner/repo
 ```
 
 Goal:
