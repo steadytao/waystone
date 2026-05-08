@@ -14,6 +14,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -973,6 +974,104 @@ func TestMigrateReportCommandWritesJSON(t *testing.T) {
 	}
 	if report.Records.Issues != 1 || report.Identity.Strategy != "preserve-source-numbering" {
 		t.Fatalf("report = %#v, want source counts and identity strategy", report)
+	}
+}
+
+func TestMigrateReportCommandCombinesMultipleSources(t *testing.T) {
+	root := writeTestLedger(t)
+	writeTestLedgerSourceWithSystem(t, root, model.Source{System: "gitlab", Owner: "example", Repo: "project"}, sourceFixtureOptions{
+		IssueNumber:       1,
+		PullRequestNumber: 2,
+		LabelName:         "bug",
+		MilestoneTitle:    "v1",
+		AuthorLogin:       "alice",
+	})
+	createLocalIssueAndLabel(t, root)
+	if err := Run(context.Background(), []string{"issue", "label", "add", "--ledger", root, "--source", "steadytao/waystone", "--issue", "1", "bug"}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("issue label add returned error: %v", err)
+	}
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{
+		"migrate", "report",
+		"--ledger", root,
+		"--from", "github:example/project",
+		"--from", "gitlab:example/project",
+		"--to", "waystone:steadytao/waystone",
+	}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("migrate report returned error: %v", err)
+	}
+	for _, want := range []string{
+		"From             github:example/project, gitlab:example/project",
+		"Sources",
+		"github:example/project",
+		"gitlab:example/project",
+		"Issues           2",
+		"Pull requests    2",
+		"Comments         4",
+		"Labels           2",
+		"Milestones       2",
+		"- Number collision: issue #1 appears in github:example/project and gitlab:example/project",
+		"- Number collision: pull request #2 appears in github:example/project and gitlab:example/project",
+		"- Label name overlap: \"bug\" appears in github:example/project and gitlab:example/project",
+		"- Milestone title overlap: \"v1\" appears in github:example/project and gitlab:example/project",
+		"- Author identity ambiguity: \"alice\" appears in github:example/project and gitlab:example/project",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+		}
+	}
+}
+
+func TestMigrateReportCommandWritesMultiSourceJSON(t *testing.T) {
+	root := writeTestLedger(t)
+	writeTestLedgerSourceWithSystem(t, root, model.Source{System: "gitlab", Owner: "example", Repo: "project"}, sourceFixtureOptions{
+		IssueNumber:                   3,
+		PullRequestNumber:             4,
+		LabelName:                     "regression",
+		MilestoneTitle:                "v2",
+		AuthorLogin:                   "eve",
+		CommentAuthorLogin:            "mallory",
+		PullRequestCommentAuthorLogin: "trent",
+		ReviewAuthorLogin:             "peggy",
+	})
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{
+		"migrate", "report",
+		"--ledger", root,
+		"--from", "github:example/project",
+		"--from", "gitlab:example/project",
+		"--to", "waystone:steadytao/waystone",
+		"--json",
+	}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("migrate report returned error: %v", err)
+	}
+	var report migrationReport
+	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+		t.Fatalf("decoding migration report JSON: %v\n%s", err, stdout.String())
+	}
+	if report.From != "github:example/project, gitlab:example/project" || len(report.Sources) != 2 {
+		t.Fatalf("report sources = %q/%#v, want two source breakdowns", report.From, report.Sources)
+	}
+	if report.Records.Issues != 2 || report.Records.PullRequests != 2 || report.Records.Comments != 4 {
+		t.Fatalf("report records = %#v, want combined counts", report.Records)
+	}
+	if report.Sources[0].Source != "github:example/project" || report.Sources[1].Source != "gitlab:example/project" {
+		t.Fatalf("source breakdowns = %#v, want stable source order", report.Sources)
+	}
+	if len(report.Warnings) != 4 {
+		t.Fatalf("warnings = %#v, want only baseline warnings without collisions", report.Warnings)
+	}
+}
+
+func TestMigrateReportCommandRequiresAtLeastOneSource(t *testing.T) {
+	root := writeTestLedger(t)
+	err := Run(context.Background(), []string{"migrate", "report", "--ledger", root, "--to", "waystone:steadytao/waystone"}, io.Discard, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "usage: waystone migrate report --from <source> --to <source>") {
+		t.Fatalf("migrate report error = %v, want usage error", err)
 	}
 }
 
@@ -2440,44 +2539,94 @@ func writeEmptyLedger(t *testing.T) string {
 
 func writeTestLedgerSource(t *testing.T, root, owner, repo string) {
 	t.Helper()
-	source := model.Source{System: "github", Owner: owner, Repo: repo, URL: "https://github.com/" + owner + "/" + repo}
+	writeTestLedgerSourceWithSystem(t, root, model.Source{System: "github", Owner: owner, Repo: repo}, sourceFixtureOptions{
+		IssueNumber:       1,
+		PullRequestNumber: 2,
+		LabelName:         "bug",
+		MilestoneTitle:    "v1",
+		AuthorLogin:       "alice",
+	})
+}
+
+type sourceFixtureOptions struct {
+	IssueNumber                   int
+	PullRequestNumber             int
+	LabelName                     string
+	MilestoneTitle                string
+	AuthorLogin                   string
+	CommentAuthorLogin            string
+	PullRequestCommentAuthorLogin string
+	ReviewAuthorLogin             string
+}
+
+func writeTestLedgerSourceWithSystem(t *testing.T, root string, source model.Source, options sourceFixtureOptions) {
+	t.Helper()
+	if source.URL == "" {
+		source.URL = sourceFixtureURL(source)
+	}
+	if options.IssueNumber == 0 {
+		options.IssueNumber = 1
+	}
+	if options.PullRequestNumber == 0 {
+		options.PullRequestNumber = 2
+	}
+	if options.LabelName == "" {
+		options.LabelName = "bug"
+	}
+	if options.MilestoneTitle == "" {
+		options.MilestoneTitle = "v1"
+	}
+	if options.AuthorLogin == "" {
+		options.AuthorLogin = "alice"
+	}
+	if options.CommentAuthorLogin == "" {
+		options.CommentAuthorLogin = "bob"
+	}
+	if options.PullRequestCommentAuthorLogin == "" {
+		options.PullRequestCommentAuthorLogin = "dave"
+	}
+	if options.ReviewAuthorLogin == "" {
+		options.ReviewAuthorLogin = "carol"
+	}
 	source.Operations = []model.SourceOperationRef{
 		{
-			ID:        "github-import-20260101t000000.000000000z",
-			Command:   "github import",
-			Path:      "operations/github-import-20260101t000000.000000000z.json",
+			ID:        source.System + "-import-20260101t000000.000000000z",
+			Command:   source.System + " import",
+			Path:      "operations/" + source.System + "-import-20260101t000000.000000000z.json",
 			StartedAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
 		},
 	}
-	provenance := model.Provenance{ImportID: "github:example/project", Source: source}
+	provenance := model.Provenance{ImportID: ledger.SourceSpec(source), Source: source}
 	createdAt := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	issueURL := source.URL + "/issues/" + strconv.Itoa(options.IssueNumber)
+	pullRequestURL := source.URL + "/pulls/" + strconv.Itoa(options.PullRequestNumber)
 	imported := model.GitHubImport{
 		Project: model.Project{
-			ID:        "github:repo:1",
-			Name:      owner + "/" + repo,
+			ID:        source.System + ":repo:1",
+			Name:      source.Owner + "/" + source.Repo,
 			URL:       source.URL,
 			CreatedAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
 			UpdatedAt: time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC),
 		},
 		Source: source,
 		Issues: []model.Issue{
-			{Provenance: provenance, ID: "github:issue:10", SourceID: 10, Number: 1, Title: "issue", Body: "issue body", State: "open", Author: model.Author{Login: "alice"}, OriginalURL: "https://github.com/example/project/issues/1", CreatedAt: createdAt},
+			{Provenance: provenance, ID: source.System + ":issue:10", SourceID: 10, Number: options.IssueNumber, Title: "issue", Body: "issue body", State: "open", Author: model.Author{Login: options.AuthorLogin}, OriginalURL: issueURL, CreatedAt: createdAt},
 		},
 		Comments: []model.Comment{
-			{Provenance: provenance, ID: "github:issue_comment:20", SourceID: 20, IssueNumber: 1, Author: model.Author{Login: "bob"}, Body: "comment", OriginalURL: "https://github.com/example/project/issues/1#issuecomment-20", CreatedAt: createdAt.Add(time.Hour)},
-			{Provenance: provenance, ID: "github:issue_comment:21", SourceID: 21, IssueNumber: 2, Author: model.Author{Login: "dave"}, Body: "pr conversation", OriginalURL: "https://github.com/example/project/pull/2#issuecomment-21", CreatedAt: createdAt.Add(30 * time.Minute)},
+			{Provenance: provenance, ID: source.System + ":issue_comment:20", SourceID: 20, IssueNumber: options.IssueNumber, Author: model.Author{Login: options.CommentAuthorLogin}, Body: "comment", OriginalURL: issueURL + "#issuecomment-20", CreatedAt: createdAt.Add(time.Hour)},
+			{Provenance: provenance, ID: source.System + ":issue_comment:21", SourceID: 21, IssueNumber: options.PullRequestNumber, Author: model.Author{Login: options.PullRequestCommentAuthorLogin}, Body: "pr conversation", OriginalURL: pullRequestURL + "#issuecomment-21", CreatedAt: createdAt.Add(30 * time.Minute)},
 		},
 		PullRequests: []model.PullRequest{
-			{Provenance: provenance, ID: "github:pull_request:30", SourceID: 30, Number: 2, Title: "pr", Body: "pr body", State: "closed", Author: model.Author{Login: "alice"}, OriginalURL: "https://github.com/example/project/pull/2", CreatedAt: createdAt},
+			{Provenance: provenance, ID: source.System + ":pull_request:30", SourceID: 30, Number: options.PullRequestNumber, Title: "pr", Body: "pr body", State: "closed", Author: model.Author{Login: options.AuthorLogin}, OriginalURL: pullRequestURL, CreatedAt: createdAt},
 		},
 		ReviewComments: []model.ReviewComment{
-			{Provenance: provenance, ID: "github:review_comment:40", SourceID: 40, PullRequestNumber: 2, Author: model.Author{Login: "carol"}, Body: "review", OriginalURL: "https://github.com/example/project/pull/2#discussion_r40", CreatedAt: createdAt.Add(time.Hour)},
+			{Provenance: provenance, ID: source.System + ":review_comment:40", SourceID: 40, PullRequestNumber: options.PullRequestNumber, Author: model.Author{Login: options.ReviewAuthorLogin}, Body: "review", OriginalURL: pullRequestURL + "#discussion_r40", CreatedAt: createdAt.Add(time.Hour)},
 		},
 		Labels: []model.Label{
-			{Provenance: provenance, ID: "github:label:50", SourceID: 50, Name: "bug", Description: "Something broken"},
+			{Provenance: provenance, ID: source.System + ":label:50", SourceID: 50, Name: options.LabelName, Description: "Something broken"},
 		},
 		Milestones: []model.Milestone{
-			{Provenance: provenance, ID: "github:milestone:60", SourceID: 60, Number: 1, Title: "v1", State: "open", OriginalURL: "https://github.com/example/project/milestone/1"},
+			{Provenance: provenance, ID: source.System + ":milestone:60", SourceID: 60, Number: 1, Title: options.MilestoneTitle, State: "open", OriginalURL: source.URL + "/milestones/1"},
 		},
 	}
 	diff, err := (ledger.Writer{Root: root}).DiffGitHubImport(imported)
@@ -2488,8 +2637,8 @@ func writeTestLedgerSource(t *testing.T, root, owner, repo string) {
 		t.Fatalf("WriteGitHubImport returned error: %v", err)
 	}
 	operation := model.Operation{
-		ID:         "github-import-20260101t000000.000000000z",
-		Command:    "github import",
+		ID:         source.System + "-import-20260101t000000.000000000z",
+		Command:    source.System + " import",
 		StartedAt:  time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
 		FinishedAt: time.Date(2026, 1, 1, 0, 1, 0, 0, time.UTC),
 		Actor:      model.OperationActor{Source: "local", User: "tester"},
@@ -2498,6 +2647,19 @@ func writeTestLedgerSource(t *testing.T, root, owner, repo string) {
 	}
 	if err := (ledger.Writer{Root: root}).WriteOperation(operation); err != nil {
 		t.Fatalf("WriteOperation returned error: %v", err)
+	}
+}
+
+func sourceFixtureURL(source model.Source) string {
+	switch source.System {
+	case "gitlab":
+		return "https://gitlab.example.com/" + source.Owner + "/" + source.Repo
+	case "forgejo":
+		return "https://forgejo.example.com/" + source.Owner + "/" + source.Repo
+	case "gitea":
+		return "https://gitea.example.com/" + source.Owner + "/" + source.Repo
+	default:
+		return "https://github.com/" + source.Owner + "/" + source.Repo
 	}
 }
 

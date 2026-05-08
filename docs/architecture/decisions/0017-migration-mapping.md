@@ -40,7 +40,7 @@ Definitions:
 - `target-native-numbering` lets the target forge assign numbers during export and records mappings afterwards
 - `manual-map` uses explicit user-provided mappings for selected records
 
-`waystone migrate report` will be read-only. It will report preserved records, local continuation records, identity handling and known gaps. It will not create target records, sync remote state or write migration mappings in its first implementation.
+`waystone migrate report` will be read-only. It will report preserved records, local continuation records, identity handling and known gaps. It may accept multiple `--from` sources to explain combined history without merging source provenance. It will not create target records, sync remote state or write migration mappings in its first implementation.
 
 `waystone migrate plan` will create a saved `waystone.migration_plan.v1` JSON artefact. The plan describes how records would map under the selected numbering strategy. It does not contact a forge, mutate a target or write ledger operation records.
 

@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/steadytao/waystone/internal/ledger"
@@ -24,9 +25,15 @@ type migrationReport struct {
 	From              string                      `json:"from"`
 	To                string                      `json:"to"`
 	Records           migrationRecordCounts       `json:"records"`
+	Sources           []migrationSourceReport     `json:"sources,omitempty"`
 	Identity          migrationIdentityReport     `json:"identity"`
 	LocalContinuation migrationContinuationCounts `json:"local_continuation"`
 	Warnings          []string                    `json:"warnings"`
+}
+
+type migrationSourceReport struct {
+	Source  string                `json:"source"`
+	Records migrationRecordCounts `json:"records"`
 }
 
 type migrationRecordCounts struct {
@@ -72,14 +79,15 @@ func runMigrateReport(args []string, stdout io.Writer) error {
 	fs := flag.NewFlagSet("waystone migrate report", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	root := fs.String("ledger", ".waystone", "Waystone ledger directory")
-	fromFlag := fs.String("from", "", "source to report from, e.g. github:owner/repo")
 	toFlag := fs.String("to", "", "source to report to, e.g. waystone:owner/repo")
 	strategyFlag := fs.String("numbering-strategy", defaultMigrationNumberingStrategy, "numbering strategy")
 	jsonOutput := fs.Bool("json", false, "write JSON output")
+	var fromFlags valueListFlag
+	fs.Var(&fromFlags, "from", "source to report from, e.g. github:owner/repo; repeatable or comma-separated")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if fs.NArg() != 0 || *fromFlag == "" || *toFlag == "" {
+	if fs.NArg() != 0 || len(fromFlags) == 0 || *toFlag == "" {
 		return errors.New("usage: waystone migrate report --from <source> --to <source>")
 	}
 	strategy, err := normalizeMigrationNumberingStrategy(*strategyFlag)
@@ -87,11 +95,8 @@ func runMigrateReport(args []string, stdout io.Writer) error {
 		return err
 	}
 	reader := ledger.Reader{Root: *root}
-	from, err := ledger.ParseSourceSpec(*fromFlag)
+	from, err := parseMigrationSources(reader, fromFlags)
 	if err != nil {
-		return err
-	}
-	if _, err := reader.Source(from); err != nil {
 		return err
 	}
 	to, err := ledger.ParseSourceSpec(*toFlag)
@@ -161,32 +166,83 @@ func normalizeMigrationNumberingStrategy(value string) (string, error) {
 	return "", fmt.Errorf("only preserve-source-numbering is supported for migration numbering, got %q", value)
 }
 
-func buildMigrationReport(reader ledger.Reader, from, to model.Source, strategy string) (migrationReport, error) {
-	records, err := sourceMigrationRecordCounts(reader, from)
-	if err != nil {
-		return migrationReport{}, err
+func parseMigrationSources(reader ledger.Reader, values []string) ([]model.Source, error) {
+	sources := make([]model.Source, 0, len(values))
+	seen := map[string]bool{}
+	for _, value := range values {
+		source, err := ledger.ParseSourceSpec(value)
+		if err != nil {
+			return nil, err
+		}
+		source, err = reader.Source(source)
+		if err != nil {
+			return nil, err
+		}
+		spec := ledger.SourceSpec(source)
+		if seen[spec] {
+			continue
+		}
+		seen[spec] = true
+		sources = append(sources, source)
+	}
+	return sources, nil
+}
+
+func buildMigrationReport(reader ledger.Reader, from []model.Source, to model.Source, strategy string) (migrationReport, error) {
+	var records migrationRecordCounts
+	sourceReports := make([]migrationSourceReport, 0, len(from))
+	for _, source := range from {
+		sourceRecords, err := sourceMigrationRecordCounts(reader, source)
+		if err != nil {
+			return migrationReport{}, err
+		}
+		records = addMigrationRecordCounts(records, sourceRecords)
+		sourceReports = append(sourceReports, migrationSourceReport{
+			Source:  ledger.SourceSpec(source),
+			Records: sourceRecords,
+		})
 	}
 	continuation, err := sourceMigrationContinuationCounts(reader, to)
 	if err != nil {
 		return migrationReport{}, err
 	}
+	warnings, err := migrationReportWarnings(reader, from)
+	if err != nil {
+		return migrationReport{}, err
+	}
 	return migrationReport{
-		From:    ledger.SourceSpec(from),
+		From:    migrationSourceSpecs(from),
 		To:      ledger.SourceSpec(to),
 		Records: records,
+		Sources: sourceReports,
 		Identity: migrationIdentityReport{
 			SourceIDs: "preserved",
 			TargetIDs: "not assigned",
 			Strategy:  strategy,
 		},
 		LocalContinuation: continuation,
-		Warnings: []string{
-			"Attachments are not yet represented",
-			"Review thread semantics are only partially represented",
-			"Users are not yet mapped to local identities",
-			"CI history is not represented",
-		},
+		Warnings:          warnings,
 	}, nil
+}
+
+func addMigrationRecordCounts(a, b migrationRecordCounts) migrationRecordCounts {
+	return migrationRecordCounts{
+		Issues:         a.Issues + b.Issues,
+		PullRequests:   a.PullRequests + b.PullRequests,
+		Comments:       a.Comments + b.Comments,
+		ReviewComments: a.ReviewComments + b.ReviewComments,
+		Labels:         a.Labels + b.Labels,
+		Milestones:     a.Milestones + b.Milestones,
+		Releases:       a.Releases + b.Releases,
+	}
+}
+
+func migrationSourceSpecs(sources []model.Source) string {
+	specs := make([]string, 0, len(sources))
+	for _, source := range sources {
+		specs = append(specs, ledger.SourceSpec(source))
+	}
+	return strings.Join(specs, ", ")
 }
 
 func buildMigrationPlan(reader ledger.Reader, from, to model.Source, numberingStrategy string, createdAt time.Time) (model.MigrationPlan, error) {
@@ -452,6 +508,210 @@ func sourceReviewCommentCount(reader ledger.Reader, source model.Source, pullReq
 	return count, nil
 }
 
+type migrationSourceFacts struct {
+	Source             string
+	IssueNumbers       []int
+	PullRequestNumbers []int
+	LabelNames         []string
+	MilestoneTitles    []string
+	AuthorLogins       []string
+}
+
+func migrationReportWarnings(reader ledger.Reader, sources []model.Source) ([]string, error) {
+	warnings := []string{
+		"Attachments are not yet represented",
+		"Review thread semantics are only partially represented",
+		"Users are not yet mapped to local identities",
+		"CI history is not represented",
+	}
+	facts := make([]migrationSourceFacts, 0, len(sources))
+	for _, source := range sources {
+		sourceFacts, err := collectMigrationSourceFacts(reader, source)
+		if err != nil {
+			return nil, err
+		}
+		facts = append(facts, sourceFacts)
+	}
+	warnings = append(warnings, numberCollisionWarnings(facts, "issue")...)
+	warnings = append(warnings, numberCollisionWarnings(facts, "pull request")...)
+	warnings = append(warnings, nameOverlapWarnings(facts, "label")...)
+	warnings = append(warnings, nameOverlapWarnings(facts, "milestone")...)
+	warnings = append(warnings, authorAmbiguityWarnings(facts)...)
+	return warnings, nil
+}
+
+func collectMigrationSourceFacts(reader ledger.Reader, source model.Source) (migrationSourceFacts, error) {
+	facts := migrationSourceFacts{Source: ledger.SourceSpec(source)}
+	issues, err := reader.SourceIssues(source)
+	if err != nil {
+		return facts, err
+	}
+	pullRequests, err := reader.SourcePullRequests(source)
+	if err != nil {
+		return facts, err
+	}
+	labels, err := reader.SourceLabels(source)
+	if err != nil {
+		return facts, err
+	}
+	milestones, err := reader.SourceMilestones(source)
+	if err != nil {
+		return facts, err
+	}
+	authorSet := map[string]bool{}
+	for _, issue := range issues {
+		facts.IssueNumbers = append(facts.IssueNumbers, issue.Number)
+		addAuthorLogin(authorSet, issue.Author.Login)
+	}
+	for _, pullRequest := range pullRequests {
+		facts.PullRequestNumbers = append(facts.PullRequestNumbers, pullRequest.Number)
+		addAuthorLogin(authorSet, pullRequest.Author.Login)
+	}
+	numbers := map[int]bool{}
+	for _, issue := range issues {
+		numbers[issue.Number] = true
+	}
+	for _, pullRequest := range pullRequests {
+		numbers[pullRequest.Number] = true
+	}
+	for number := range numbers {
+		comments, err := reader.SourceComments(source, number)
+		if err != nil {
+			return facts, err
+		}
+		for _, comment := range comments {
+			addAuthorLogin(authorSet, comment.Author.Login)
+		}
+	}
+	for _, pullRequest := range pullRequests {
+		reviewComments, err := reader.SourceReviewComments(source, pullRequest.Number)
+		if err != nil {
+			return facts, err
+		}
+		for _, comment := range reviewComments {
+			addAuthorLogin(authorSet, comment.Author.Login)
+		}
+	}
+	for _, label := range labels {
+		if label.Name != "" {
+			facts.LabelNames = append(facts.LabelNames, label.Name)
+		}
+	}
+	for _, milestone := range milestones {
+		if milestone.Title != "" {
+			facts.MilestoneTitles = append(facts.MilestoneTitles, milestone.Title)
+		}
+	}
+	for login := range authorSet {
+		facts.AuthorLogins = append(facts.AuthorLogins, login)
+	}
+	sort.Ints(facts.IssueNumbers)
+	sort.Ints(facts.PullRequestNumbers)
+	sort.Strings(facts.LabelNames)
+	sort.Strings(facts.MilestoneTitles)
+	sort.Strings(facts.AuthorLogins)
+	return facts, nil
+}
+
+func addAuthorLogin(authors map[string]bool, login string) {
+	login = strings.TrimSpace(login)
+	if login != "" {
+		authors[login] = true
+	}
+}
+
+func numberCollisionWarnings(facts []migrationSourceFacts, object string) []string {
+	seen := map[int]string{}
+	var warnings []string
+	for _, sourceFacts := range facts {
+		var numbers []int
+		switch object {
+		case "issue":
+			numbers = sourceFacts.IssueNumbers
+		case "pull request":
+			numbers = sourceFacts.PullRequestNumbers
+		}
+		sourceSeen := map[int]bool{}
+		for _, number := range numbers {
+			if sourceSeen[number] {
+				continue
+			}
+			sourceSeen[number] = true
+			if previous, ok := seen[number]; ok && previous != sourceFacts.Source {
+				warnings = append(warnings, fmt.Sprintf("Number collision: %s #%d appears in %s and %s", object, number, previous, sourceFacts.Source))
+				continue
+			}
+			seen[number] = sourceFacts.Source
+		}
+	}
+	return warnings
+}
+
+func nameOverlapWarnings(facts []migrationSourceFacts, object string) []string {
+	seen := map[string]namedMigrationValue{}
+	var warnings []string
+	for _, sourceFacts := range facts {
+		var names []string
+		switch object {
+		case "label":
+			names = sourceFacts.LabelNames
+		case "milestone":
+			names = sourceFacts.MilestoneTitles
+		}
+		sourceSeen := map[string]bool{}
+		for _, name := range names {
+			key := strings.ToLower(name)
+			if sourceSeen[key] {
+				continue
+			}
+			sourceSeen[key] = true
+			if previous, ok := seen[key]; ok && previous.Source != sourceFacts.Source {
+				noun := object + " name"
+				if object == "milestone" {
+					noun = "milestone title"
+				}
+				warnings = append(warnings, fmt.Sprintf("%s overlap: %q appears in %s and %s", titleCase(noun), previous.Name, previous.Source, sourceFacts.Source))
+				continue
+			}
+			seen[key] = namedMigrationValue{Name: name, Source: sourceFacts.Source}
+		}
+	}
+	return warnings
+}
+
+type namedMigrationValue struct {
+	Name   string
+	Source string
+}
+
+func authorAmbiguityWarnings(facts []migrationSourceFacts) []string {
+	seen := map[string]namedMigrationValue{}
+	var warnings []string
+	for _, sourceFacts := range facts {
+		sourceSeen := map[string]bool{}
+		for _, login := range sourceFacts.AuthorLogins {
+			key := strings.ToLower(login)
+			if sourceSeen[key] {
+				continue
+			}
+			sourceSeen[key] = true
+			if previous, ok := seen[key]; ok && previous.Source != sourceFacts.Source {
+				warnings = append(warnings, fmt.Sprintf("Author identity ambiguity: %q appears in %s and %s", previous.Name, previous.Source, sourceFacts.Source))
+				continue
+			}
+			seen[key] = namedMigrationValue{Name: login, Source: sourceFacts.Source}
+		}
+	}
+	return warnings
+}
+
+func titleCase(value string) string {
+	if value == "" {
+		return value
+	}
+	return strings.ToUpper(value[:1]) + value[1:]
+}
+
 func writeMigrationReport(stdout io.Writer, report migrationReport) {
 	fmt.Fprintln(stdout, "Migration report")
 	writeIndentedField(stdout, "From", report.From)
@@ -467,6 +727,21 @@ func writeMigrationReport(stdout io.Writer, report migrationReport) {
 	writeIndentedField(stdout, "Milestones", report.Records.Milestones)
 	writeIndentedField(stdout, "Releases", report.Records.Releases)
 	fmt.Fprintln(stdout)
+
+	if len(report.Sources) > 1 {
+		fmt.Fprintln(stdout, "Sources")
+		for _, source := range report.Sources {
+			fmt.Fprintln(stdout, source.Source)
+			writeIndentedField(stdout, "Issues", source.Records.Issues)
+			writeIndentedField(stdout, "Pull requests", source.Records.PullRequests)
+			writeIndentedField(stdout, "Comments", source.Records.Comments)
+			writeIndentedField(stdout, "Review comments", source.Records.ReviewComments)
+			writeIndentedField(stdout, "Labels", source.Records.Labels)
+			writeIndentedField(stdout, "Milestones", source.Records.Milestones)
+			writeIndentedField(stdout, "Releases", source.Records.Releases)
+		}
+		fmt.Fprintln(stdout)
+	}
 
 	fmt.Fprintln(stdout, "Identity")
 	writeIndentedField(stdout, "Source IDs", report.Identity.SourceIDs)

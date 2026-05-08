@@ -213,6 +213,7 @@ Audit browse commands read locally persisted audit records. They do not contact 
 
 ```sh
 waystone migrate report --from github:steadytao/waymark --to waystone:steadytao/waymark
+waystone migrate report --from github:steadytao/waymark --from gitlab:steadytao/waymark --to waystone:steadytao/waymark
 waystone migrate report --from github:steadytao/waymark --to waystone:steadytao/waymark --numbering-strategy preserve-source-numbering
 waystone migrate report --from github:steadytao/waymark --to waystone:steadytao/waymark --json
 waystone migrate plan --from github:steadytao/waymark --to waystone:steadytao/waymark --numbering-strategy preserve-source-numbering --out waystone-migration-plan.json
@@ -221,6 +222,8 @@ waystone migrate plan --from github:steadytao/waymark --to waystone:steadytao/wa
 `migrate report` reads local ledger data only. It does not contact a forge, create target records or write operation records.
 
 The report counts preserved source records, local continuation records and known migration gaps. Original source IDs remain immutable ledger facts. Target IDs are not assigned by the read-only report.
+
+Repeated `--from` values produce a cross-source report. Waystone keeps each source namespace separate, reports per-source counts, detects overlapping issue and pull request numbers and warns about label, milestone and author identity ambiguity. It does not merge records by matching names.
 
 `migrate plan` writes a deterministic JSON artefact describing how source records would map under the selected numbering strategy. The first implementation supports only `preserve-source-numbering`.
 

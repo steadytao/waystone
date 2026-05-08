@@ -124,6 +124,18 @@ waystone migrate report --from github:steadytao/waymark --to waystone:steadytao/
 
 The report counts preserved source records, local continuation records and known gaps. It does not contact a forge or write target records.
 
+Generate a cross-source report:
+```sh
+waystone migrate report \
+  --from github:steadytao/waymark \
+  --from gitlab:steadytao/waymark \
+  --from forgejo:steadytao/waymark \
+  --from gitea:steadytao/waymark \
+  --to waystone:steadytao/waystone
+```
+
+Cross-source reports keep each source namespace separate and warn about overlapping numbers, labels, milestones and source author identities. They do not merge records by matching display names.
+
 Write a read-only migration plan:
 ```sh
 waystone migrate plan --from github:steadytao/waymark --to waystone:steadytao/waystone --numbering-strategy preserve-source-numbering --out waystone-migration-plan.json
