@@ -94,7 +94,17 @@ First command:
 waystone migrate report --from github:owner/repo --to waystone:owner/repo
 ```
 
-The first migration report is read-only. It counts imported records, local continuation records, identity handling and known gaps such as attachments, user mapping and CI history.
+Cross-source report command:
+```sh
+waystone migrate report \
+  --from github:owner/repo \
+  --from gitlab:group/project \
+  --from forgejo:owner/repo \
+  --from gitea:owner/repo \
+  --to waystone:owner/repo
+```
+
+The migration report is read-only. It counts imported records, local continuation records, identity handling and known gaps such as attachments, user mapping and CI history. Cross-source reports keep source namespaces separate, detect source-local number collisions and warn about ambiguous labels, milestones and authors without merging them.
 
 First plan command:
 ```sh
@@ -107,7 +117,7 @@ I am keeping source IDs immutable. Target IDs are projections, not rewritten sou
 
 ## Phase 4: Patches And Reviews
 
-Before this phase, Waystone should prove cross-source migration reports across GitHub, GitLab and Forgejo/Gitea imports.
+Before this phase, Waystone should prove export dry-runs from migration reports.
 
 Current second-forge import commands:
 ```sh
