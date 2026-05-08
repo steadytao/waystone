@@ -23,6 +23,10 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	switch args[0] {
 	case "audit":
 		return runAudit(args[1:], stdout, stderr)
+	case "forgejo":
+		return runForgejo(ctx, args[1:], stdout, stderr)
+	case "gitea":
+		return runGitea(ctx, args[1:], stdout, stderr)
 	case "github":
 		return runGitHub(ctx, args[1:], stdout, stderr)
 	case "gitlab":

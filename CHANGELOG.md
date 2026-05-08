@@ -15,6 +15,9 @@ The format is based on Keep a Changelog and Waystone intends to follow Semantic 
 - `waystone gitlab import group/project` for read-only GitLab project history import
 - ADR 0018 for GitLab read-only import scope and constraints
 - GitHub API errors now preserve token-scope and documentation details where GitHub returns them
+- `waystone forgejo import owner/repo` for read-only Forgejo repository history import
+- `waystone gitea import owner/repo` for read-only Gitea repository history import
+- ADR 0019 for separate Forgejo and Gitea read-only import scope and constraints
 
 ### Changed
 

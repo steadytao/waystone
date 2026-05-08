@@ -55,6 +55,35 @@ Credential rules:
 
 GitHub API errors preserve accepted OAuth scopes, token OAuth scopes and documentation URLs where GitHub returns them. This is useful when a token is valid but lacks access to a required repository or API surface.
 
+## Forgejo Import
+
+```sh
+waystone forgejo import owner/repo
+FORGEJO_TOKEN=<token> waystone forgejo import owner/repo
+waystone forgejo import owner/repo --concurrency 12
+```
+
+Forgejo import is read-only. It imports repository metadata, issues, issue comments, pull requests, pull request conversation comments, labels, milestones and releases into a `forgejo:owner/repo` source namespace.
+
+`FORGEJO_TOKEN` is used when present. `--token-env` can point to another Forgejo token environment variable. Tokens are never stored. Forgejo import does not read `GITEA_TOKEN`.
+
+Use `--concurrency` to control bounded concurrent comment requests. The default is `8`.
+
+## Gitea Import
+
+```sh
+waystone gitea import owner/repo
+GITEA_TOKEN=<token> waystone gitea import owner/repo
+waystone gitea import owner/repo --api-base https://gitea.example.com/api/v1
+waystone gitea import owner/repo --concurrency 12
+```
+
+Gitea import is read-only. It imports repository metadata, issues, issue comments, pull requests, pull request conversation comments, labels, milestones and releases into a `gitea:owner/repo` source namespace.
+
+`GITEA_TOKEN` is used when present. `--token-env` can point to another Gitea token environment variable. Tokens are never stored. Gitea import does not read `FORGEJO_TOKEN`.
+
+Use `--concurrency` to control bounded concurrent comment requests. The default is `8`.
+
 ## GitHub Audit, Import And Refresh
 
 ```sh

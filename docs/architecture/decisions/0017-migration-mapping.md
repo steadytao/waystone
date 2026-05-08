@@ -1,4 +1,4 @@
-# 0017: Migration mapping
+# Migration Mapping
 
 <!-- ![Proposed](https://img.shields.io/badge/status-proposed-informational?style=for-the-badge) -->
 ![Accepted](https://img.shields.io/badge/status-accepted-brightgreen?style=for-the-badge)

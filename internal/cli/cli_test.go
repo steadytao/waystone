@@ -308,6 +308,249 @@ func TestGitLabImportCommandAcceptsFlagsAfterProject(t *testing.T) {
 	}
 }
 
+func TestForgejoImportCommandWritesLedgerRecord(t *testing.T) {
+	apiBase := forgejoImportTestServer(t)
+	root := t.TempDir()
+	t.Setenv("FORGEJO_TOKEN", "test-token")
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"forgejo", "import", "--api-base", apiBase, "--out", root, "example/project"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("forgejo import returned error: %v stderr=%q", err, stderr.String())
+	}
+	for _, want := range []string{
+		"Project",
+		"example/project",
+		"Import complete",
+		"Issues           1",
+		"Comments         2",
+		"Pull requests    1",
+		"Labels           1",
+		"Milestones       1",
+		"Releases         1",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+		}
+	}
+	reader := ledger.Reader{Root: root}
+	source := model.Source{System: "forgejo", Owner: "example", Repo: "project"}
+	if _, err := reader.Source(source); err != nil {
+		t.Fatalf("Source returned error: %v", err)
+	}
+	issues, err := reader.SourceIssues(source)
+	if err != nil {
+		t.Fatalf("SourceIssues returned error: %v", err)
+	}
+	if len(issues) != 1 || issues[0].ID != "forgejo:issue:101:1" || issues[0].OriginalURL != "https://forgejo.example.com/example/project/issues/1" {
+		t.Fatalf("issues = %#v, want Forgejo issue identity and URL", issues)
+	}
+	prs, err := reader.SourcePullRequests(source)
+	if err != nil {
+		t.Fatalf("SourcePullRequests returned error: %v", err)
+	}
+	if len(prs) != 1 || prs[0].ID != "forgejo:pull_request:101:2" || prs[0].Number != 2 {
+		t.Fatalf("pull requests = %#v, want Forgejo pull request identity", prs)
+	}
+	comments, err := reader.SourceComments(source, 2)
+	if err != nil {
+		t.Fatalf("SourceComments returned error: %v", err)
+	}
+	if len(comments) != 1 || comments[0].ID != "forgejo:pull_request_comment:101:2:302" {
+		t.Fatalf("pull request comments = %#v, want Forgejo pull request comment", comments)
+	}
+	operations, err := reader.Operations()
+	if err != nil {
+		t.Fatalf("Operations returned error: %v", err)
+	}
+	if len(operations) != 1 || operations[0].Command != "forgejo import" || operations[0].Auth.Provider != "forgejo" || operations[0].Auth.Mode != "environment" {
+		t.Fatalf("operations = %#v, want forgejo import operation with environment auth", operations)
+	}
+}
+
+func TestGiteaImportCommandWritesGiteaSource(t *testing.T) {
+	apiBase := forgejoImportTestServer(t)
+	root := t.TempDir()
+	t.Setenv("FORGEJO_TOKEN", "")
+	t.Setenv("GITEA_TOKEN", "test-token")
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"gitea", "import", "example/project", "--api-base", apiBase, "--out", root}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("gitea import returned error: %v stderr=%q", err, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Import complete") {
+		t.Fatalf("stdout = %q, want successful import", stdout.String())
+	}
+	reader := ledger.Reader{Root: root}
+	source := model.Source{System: "gitea", Owner: "example", Repo: "project"}
+	if _, err := reader.Source(source); err != nil {
+		t.Fatalf("Source returned error: %v", err)
+	}
+	issues, err := reader.SourceIssues(source)
+	if err != nil {
+		t.Fatalf("SourceIssues returned error: %v", err)
+	}
+	if len(issues) != 1 || issues[0].ID != "gitea:issue:101:1" {
+		t.Fatalf("issues = %#v, want Gitea issue identity", issues)
+	}
+	operations, err := reader.Operations()
+	if err != nil {
+		t.Fatalf("Operations returned error: %v", err)
+	}
+	if len(operations) != 1 || operations[0].Command != "gitea import" || operations[0].Auth.Provider != "gitea" {
+		t.Fatalf("operations = %#v, want gitea import operation", operations)
+	}
+}
+
+func TestForgejoImportCommandDoesNotReadGiteaToken(t *testing.T) {
+	apiBase := forgejoImportTestServerRejectingAuth(t)
+	root := t.TempDir()
+	t.Setenv("FORGEJO_TOKEN", "")
+	t.Setenv("GITEA_TOKEN", "wrong-token")
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"forgejo", "import", "example/project", "--api-base", apiBase, "--out", root}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("forgejo import returned error: %v stderr=%q", err, stderr.String())
+	}
+	operations, err := (ledger.Reader{Root: root}).Operations()
+	if err != nil {
+		t.Fatalf("Operations returned error: %v", err)
+	}
+	if len(operations) != 1 || operations[0].Auth.Provider != "forgejo" || operations[0].Auth.Mode != "none" {
+		t.Fatalf("operations = %#v, want unauthenticated forgejo import", operations)
+	}
+}
+
+func TestGiteaImportCommandDoesNotReadForgejoToken(t *testing.T) {
+	apiBase := forgejoImportTestServerRejectingAuth(t)
+	root := t.TempDir()
+	t.Setenv("FORGEJO_TOKEN", "wrong-token")
+	t.Setenv("GITEA_TOKEN", "")
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"gitea", "import", "example/project", "--api-base", apiBase, "--out", root}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("gitea import returned error: %v stderr=%q", err, stderr.String())
+	}
+	operations, err := (ledger.Reader{Root: root}).Operations()
+	if err != nil {
+		t.Fatalf("Operations returned error: %v", err)
+	}
+	if len(operations) != 1 || operations[0].Auth.Provider != "gitea" || operations[0].Auth.Mode != "none" {
+		t.Fatalf("operations = %#v, want unauthenticated gitea import", operations)
+	}
+}
+
+func TestForgejoImportCommandReportsTokenErrors(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		fmt.Fprint(w, `{"message":"token does not have required permissions","url":"https://forgejo.example.com/api/swagger"}`)
+	}))
+	t.Cleanup(server.Close)
+	root := t.TempDir()
+	t.Setenv("FORGEJO_TOKEN", "test-token")
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"forgejo", "import", "--api-base", server.URL, "--out", root, "example/project"}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("forgejo import returned nil error, want permission error")
+	}
+	for _, want := range []string{"token does not have required permissions", "https://forgejo.example.com/api/swagger"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("forgejo import error = %q, want %q", err.Error(), want)
+		}
+	}
+}
+
+func TestGiteaImportCommandReportsGiteaTokenErrors(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		fmt.Fprint(w, `{"message":"token does not have required permissions","url":"https://gitea.example.com/api/swagger"}`)
+	}))
+	t.Cleanup(server.Close)
+	root := t.TempDir()
+	t.Setenv("GITEA_TOKEN", "test-token")
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"gitea", "import", "--api-base", server.URL, "--out", root, "example/project"}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("gitea import returned nil error, want permission error")
+	}
+	for _, want := range []string{"gitea request failed", "token does not have required permissions", "https://gitea.example.com/api/swagger"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("gitea import error = %q, want %q", err.Error(), want)
+		}
+	}
+	if strings.Contains(err.Error(), "forgejo request failed") {
+		t.Fatalf("gitea import error = %q, should not mention forgejo request failure", err.Error())
+	}
+}
+
+func TestForgejoImportCommandReportsRateLimits(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Retry-After", "60")
+		w.Header().Set("X-RateLimit-Remaining", "0")
+		w.Header().Set("X-RateLimit-Reset", "1770000000")
+		w.WriteHeader(http.StatusTooManyRequests)
+		fmt.Fprint(w, `{"message":"too many requests","url":"https://forgejo.example.com/api/swagger"}`)
+	}))
+	t.Cleanup(server.Close)
+	root := t.TempDir()
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"forgejo", "import", "--api-base", server.URL, "--out", root, "example/project"}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("forgejo import returned nil error, want rate limit error")
+	}
+	for _, want := range []string{"forgejo request failed", "rate limited", "retry after: 60", "rate limit remaining: 0", "rate limit reset: 1770000000", "https://forgejo.example.com/api/swagger"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("forgejo import error = %q, want %q", err.Error(), want)
+		}
+	}
+}
+
+func TestGiteaImportCommandReportsTimeouts(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(50 * time.Millisecond)
+		fmt.Fprint(w, `{}`)
+	}))
+	t.Cleanup(server.Close)
+	root := t.TempDir()
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"gitea", "import", "--api-base", server.URL, "--out", root, "--timeout", "1ms", "example/project"}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("gitea import returned nil error, want timeout error")
+	}
+	for _, want := range []string{"gitea request failed", "request timed out"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("gitea import error = %q, want %q", err.Error(), want)
+		}
+	}
+	if strings.Contains(err.Error(), "Client.Timeout exceeded") {
+		t.Fatalf("gitea import error = %q, should use stable timeout wording", err.Error())
+	}
+}
+
+func TestForgejoImportCommandTreatsMissingPullSurfaceAsEmpty(t *testing.T) {
+	apiBase := forgejoImportTestServerWithMissingPulls(t)
+	root := t.TempDir()
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"forgejo", "import", "--api-base", apiBase, "--out", root, "example/project"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("forgejo import returned error: %v stderr=%q", err, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Pull requests    0") {
+		t.Fatalf("stdout = %q, want zero pull requests", stdout.String())
+	}
+}
+
 func TestGitHubAuditCommandVerbosePrintsActionEvidence(t *testing.T) {
 	apiBase := githubAuditTestServer(t)
 	var stdout, stderr bytes.Buffer
@@ -2332,6 +2575,100 @@ func gitLabImportTestServer(t *testing.T) string {
 			fmt.Fprintf(w, `[{"id":401,"iid":1,"title":"v1","description":"version one","state":"active","web_url":"https://gitlab.example.com/example/project/-/milestones/1","created_at":%q,"updated_at":%q}]`, createdAt, updatedAt)
 		case "/projects/example/project/releases":
 			fmt.Fprintf(w, `[{"tag_name":"v0.1.0","name":"v0.1.0","description":"release notes","author":{"id":1,"username":"alice","name":"Alice","web_url":"https://gitlab.example.com/alice"},"_links":{"self":"https://gitlab.example.com/example/project/-/releases/v0.1.0"},"created_at":%q,"released_at":"2026-01-04T00:00:00Z"}]`, createdAt)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+	return server.URL
+}
+
+func forgejoImportTestServer(t *testing.T) string {
+	t.Helper()
+	createdAt := "2026-01-01T00:00:00Z"
+	updatedAt := "2026-01-02T00:00:00Z"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if got := r.Header.Get("Authorization"); got != "token test-token" {
+			t.Fatalf("Authorization = %q, want token test-token", got)
+		}
+		switch r.URL.Path {
+		case "/repos/example/project":
+			fmt.Fprintf(w, `{"id":101,"full_name":"example/project","description":"test project","html_url":"https://forgejo.example.com/example/project","created_at":%q,"updated_at":%q}`, createdAt, updatedAt)
+		case "/repos/example/project/issues":
+			fmt.Fprintf(w, `[{"id":201,"number":1,"title":"issue","body":"issue body","state":"open","user":{"id":1,"login":"alice","full_name":"Alice","html_url":"https://forgejo.example.com/alice","avatar_url":"https://forgejo.example.com/avatar.png"},"labels":[{"id":501,"name":"bug","color":"d73a4a","description":"Something broken"}],"milestone":{"id":401,"title":"v1","description":"version one","state":"open","html_url":"https://forgejo.example.com/example/project/milestones/1","created_at":%q,"updated_at":%q},"comments":1,"html_url":"https://forgejo.example.com/example/project/issues/1","created_at":%q,"updated_at":%q}]`, createdAt, updatedAt, createdAt, updatedAt)
+		case "/repos/example/project/issues/1/comments":
+			fmt.Fprintf(w, `[{"id":301,"user":{"id":2,"login":"bob","full_name":"Bob","html_url":"https://forgejo.example.com/bob"},"body":"issue comment","html_url":"https://forgejo.example.com/example/project/issues/1#issuecomment-301","created_at":%q,"updated_at":%q}]`, createdAt, updatedAt)
+		case "/repos/example/project/pulls":
+			fmt.Fprintf(w, `[{"id":202,"number":2,"title":"pull request","body":"pull body","state":"closed","user":{"id":1,"login":"alice","full_name":"Alice","html_url":"https://forgejo.example.com/alice"},"html_url":"https://forgejo.example.com/example/project/pulls/2","base":{"ref":"main"},"head":{"ref":"feature"},"merged":true,"merged_at":"2026-01-03T00:00:00Z","created_at":%q,"updated_at":%q}]`, createdAt, updatedAt)
+		case "/repos/example/project/issues/2/comments":
+			fmt.Fprintf(w, `[{"id":302,"user":{"id":3,"login":"carol","full_name":"Carol","html_url":"https://forgejo.example.com/carol"},"body":"pull request comment","html_url":"https://forgejo.example.com/example/project/pulls/2#issuecomment-302","created_at":%q,"updated_at":%q}]`, createdAt, updatedAt)
+		case "/repos/example/project/labels":
+			fmt.Fprint(w, `[{"id":501,"name":"bug","color":"d73a4a","description":"Something broken"}]`)
+		case "/repos/example/project/milestones":
+			fmt.Fprintf(w, `[{"id":401,"title":"v1","description":"version one","state":"open","html_url":"https://forgejo.example.com/example/project/milestones/1","created_at":%q,"updated_at":%q}]`, createdAt, updatedAt)
+		case "/repos/example/project/releases":
+			fmt.Fprintf(w, `[{"id":601,"tag_name":"v0.1.0","name":"v0.1.0","body":"release notes","author":{"id":1,"login":"alice","full_name":"Alice","html_url":"https://forgejo.example.com/alice"},"html_url":"https://forgejo.example.com/example/project/releases/tag/v0.1.0","created_at":%q,"published_at":"2026-01-04T00:00:00Z"}]`, createdAt)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+	return server.URL
+}
+
+func forgejoImportTestServerWithMissingPulls(t *testing.T) string {
+	t.Helper()
+	createdAt := "2026-01-01T00:00:00Z"
+	updatedAt := "2026-01-02T00:00:00Z"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/repos/example/project":
+			fmt.Fprintf(w, `{"id":101,"full_name":"example/project","description":"test project","html_url":"https://forgejo.example.com/example/project","created_at":%q,"updated_at":%q}`, createdAt, updatedAt)
+		case "/repos/example/project/issues":
+			fmt.Fprint(w, `[]`)
+		case "/repos/example/project/pulls":
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprint(w, `{"message":"The target couldn't be found.","url":"https://forgejo.example.com/api/swagger"}`)
+		case "/repos/example/project/labels":
+			fmt.Fprint(w, `[]`)
+		case "/repos/example/project/milestones":
+			fmt.Fprint(w, `[]`)
+		case "/repos/example/project/releases":
+			fmt.Fprint(w, `[]`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+	return server.URL
+}
+
+func forgejoImportTestServerRejectingAuth(t *testing.T) string {
+	t.Helper()
+	createdAt := "2026-01-01T00:00:00Z"
+	updatedAt := "2026-01-02T00:00:00Z"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if got := r.Header.Get("Authorization"); got != "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			fmt.Fprintf(w, `{"message":"unexpected authorization header %q"}`, got)
+			return
+		}
+		switch r.URL.Path {
+		case "/repos/example/project":
+			fmt.Fprintf(w, `{"id":101,"full_name":"example/project","description":"test project","html_url":"https://forge.example.com/example/project","created_at":%q,"updated_at":%q}`, createdAt, updatedAt)
+		case "/repos/example/project/issues":
+			fmt.Fprint(w, `[]`)
+		case "/repos/example/project/pulls":
+			fmt.Fprint(w, `[]`)
+		case "/repos/example/project/labels":
+			fmt.Fprint(w, `[]`)
+		case "/repos/example/project/milestones":
+			fmt.Fprint(w, `[]`)
+		case "/repos/example/project/releases":
+			fmt.Fprint(w, `[]`)
 		default:
 			http.NotFound(w, r)
 		}
