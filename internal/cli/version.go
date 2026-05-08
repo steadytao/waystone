@@ -18,7 +18,7 @@ func runVersion(args []string, stdout io.Writer) error {
 		return err
 	}
 	if fs.NArg() != 0 {
-		return errors.New("usage: waystone version [flags]")
+		return errors.New("usage: waystone version [--json]")
 	}
 	if *jsonOutput {
 		return writeJSONOutput(stdout, map[string]string{"version": Version})

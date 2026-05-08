@@ -11,7 +11,7 @@ Important assets include:
 - imported ledgers
 - projected issue state
 - imported external identities
-- release and review records in future versions
+- release records and review history
 
 ## Threats
 
@@ -31,7 +31,7 @@ Relevant threats include:
 
 Importing Waystone data must never execute anything.
 
-Waystone ledgers, imported GitHub records, events, comments, issue bodies and future review records are data. They must not trigger commands, hooks, scripts, CI jobs, webhooks or network requests during import.
+Waystone ledgers, imported forge records, local events, comments, issue bodies and review records are data. They must not trigger commands, hooks, scripts, CI jobs, webhooks or network requests during import.
 
 ## Credential Storage
 
@@ -60,7 +60,7 @@ The project needs to define which identities can perform authority-bearing actio
 Examples:
 - maintainers can close issues
 - maintainers can reopen issues
-- trusted contributors may label issues in future versions
+- trusted contributors may label issues when local policy grants that authority
 - anyone may submit comment events, subject to local policy
 
 Events outside the author's authority should be retained as untrusted or rejected but not silently accepted.
@@ -84,7 +84,7 @@ Importers should validate structure, enforce size limits and preserve source pro
 Initial mitigations:
 - deterministic import output
 - source provenance for imported records
-- signed events once local records are supported
+- signed operation records and source manifests
 - explicit project trust policy
 - maintainer allowlist
 - untrusted-event quarantine

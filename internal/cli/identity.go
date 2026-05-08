@@ -47,7 +47,7 @@ func runIdentityInit(args []string, stdout io.Writer) error {
 		return err
 	}
 	if fs.NArg() != 0 {
-		return errors.New("usage: waystone identity init [flags]")
+		return errors.New("usage: waystone identity init [--ledger <dir>] [--name <name>]")
 	}
 	startedAt := time.Now().UTC()
 	identity, err := ledger.CreateDefaultIdentity(*root, *name)
@@ -91,7 +91,7 @@ func runIdentityShow(args []string, stdout io.Writer) error {
 		return err
 	}
 	if fs.NArg() != 0 {
-		return errors.New("usage: waystone identity show [flags]")
+		return errors.New("usage: waystone identity show [--ledger <dir>] [--json]")
 	}
 	identity, err := ledger.DefaultIdentity(*root)
 	if err != nil {
@@ -118,7 +118,7 @@ func runIdentityList(args []string, stdout io.Writer) error {
 		return err
 	}
 	if fs.NArg() != 0 {
-		return errors.New("usage: waystone identity list [flags]")
+		return errors.New("usage: waystone identity list [--ledger <dir>] [--json]")
 	}
 	reader := ledger.Reader{Root: *root}
 	identities, err := reader.Identities()
@@ -154,7 +154,7 @@ func runIdentityTrust(args []string, stdout io.Writer) error {
 		return err
 	}
 	if fs.NArg() != 1 {
-		return errors.New("usage: waystone identity trust [flags] <identity-id>")
+		return errors.New("usage: waystone identity trust [--ledger <dir>] <identity-id>")
 	}
 	startedAt := time.Now().UTC()
 	if err := (ledger.Writer{Root: *root}).TrustIdentity(fs.Arg(0)); err != nil {
@@ -178,7 +178,7 @@ func runIdentityUntrust(args []string, stdout io.Writer) error {
 		return err
 	}
 	if fs.NArg() != 1 {
-		return errors.New("usage: waystone identity untrust [flags] <identity-id>")
+		return errors.New("usage: waystone identity untrust [--ledger <dir>] <identity-id>")
 	}
 	startedAt := time.Now().UTC()
 	if err := (ledger.Writer{Root: *root}).UntrustIdentity(fs.Arg(0)); err != nil {
@@ -231,7 +231,7 @@ func runIdentityStatus(args []string, stdout io.Writer) error {
 		return err
 	}
 	if fs.NArg() != 0 {
-		return errors.New("usage: waystone identity status [flags]")
+		return errors.New("usage: waystone identity status [--ledger <dir>] [--json]")
 	}
 	reader := ledger.Reader{Root: *root}
 	identities, err := reader.Identities()

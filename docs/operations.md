@@ -26,10 +26,15 @@ The filename also includes a short hash suffix so operation files remain stable 
 Examples:
 ```text
 github import
+gitlab import
+forgejo import
+gitea import
 source refresh
 ledger verify --strict
 source default
 identity trust
+issue create
+label create
 ```
 
 `args` stores command arguments for auditability. Commands must avoid recording secrets.

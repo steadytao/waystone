@@ -4,6 +4,18 @@ This directory contains Waystone's checked-in release surface.
 
 Use it to review release readiness rules, the release note template and published release notes.
 
+Release naming:
+- `alpha`, feature exists, public contract still moving
+- `beta`, intended feature set exists, contract refinement only
+- `rc`, release candidate, only blockers should change
+- `stable`, documented contract other tools may depend on
+
+Current version lines:
+- `v0.1.x`, first preservation and local-ledger proof
+- `v0.2.x`, bridge-ready migration contract
+- `v0.3.x`, refinements after a separate bridge tool begins consuming the contract
+- `v1.0.0`, stable public ledger, archive and migration contract with real external use
+
 Waystone publishes releases in two phases:
 - `Prepare Release`, the manual verification and tag-creation workflow
 - `Release`, the tag-triggered publishing workflow that builds release assets, generates SBOMs, signs release integrity metadata and publishes provenance attestations

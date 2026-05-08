@@ -6,6 +6,17 @@ Most browsing commands support `--source <system>:<owner>/<repo>`, for example `
 
 Most read-only display commands support `--json`.
 
+Use `waystone help <command>` for command-specific help:
+```sh
+waystone help github import
+waystone help ledger
+waystone help migrate report
+waystone help issue create
+waystone migrate help report
+```
+
+Required values are written as `<value>`. Optional flags and operands are written in square brackets.
+
 ## Version
 
 ```sh
@@ -162,7 +173,7 @@ waystone source refresh --sources github:steadytao/waymark,github:steadytao/surv
 
 Source commands expose import manifests: identity, object refs, operation refs, object counts and refresh state.
 
-Source names are repo-specific namespaces. GitHub imports use `github:owner/repo`; local Waystone records use `waystone:owner/repo`. Numbers are source-local, so the same issue number can exist in multiple sources without representing the same record.
+Source names are repo-specific namespaces. Remote imports currently use `github:owner/repo`, `gitlab:group/project`, `forgejo:owner/repo` and `gitea:owner/repo`. Local Waystone records use `waystone:owner/repo`. Numbers are source-local, so the same issue number can exist in multiple sources without representing the same record.
 
 Refresh behaviour:
 - `source refresh` refreshes every source by default
@@ -247,7 +258,7 @@ Archive exports include a `WAYSTONE-MANIFEST.json` tar entry that records export
 
 JSON export writes a single inspection bundle. `--compact` removes formatting from that JSON export only; it does not rewrite the ledger.
 
-Safe import verifies the archive manifest, archive shape and ledger operation chain, then confirms GitHub sources through authenticated GitHub API access.
+Safe import verifies the archive manifest, archive shape and ledger operation chain, then confirms GitHub sources through authenticated GitHub API access. GitLab, Forgejo and Gitea source confirmation is not implemented yet.
 
 `--unsafe` skips remote source confirmation. It does not allow path traversal or unsupported archive entries.
 

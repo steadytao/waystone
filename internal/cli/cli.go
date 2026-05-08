@@ -19,6 +19,12 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		printUsage(stderr)
 		return errors.New("missing command")
 	}
+	if args[0] == "help" {
+		return runHelp(args[1:], stdout)
+	}
+	if len(args) > 1 && args[1] == "help" {
+		return runHelp(append([]string{args[0]}, args[2:]...), stdout)
+	}
 
 	switch args[0] {
 	case "audit":
@@ -49,7 +55,7 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		return runSource(ctx, args[1:], stdout, stderr)
 	case "version":
 		return runVersion(args[1:], stdout)
-	case "help", "-h", "--help":
+	case "-h", "--help":
 		printUsage(stdout)
 		return nil
 	default:

@@ -200,6 +200,8 @@ waystone issue edit --source owner/repo --issue <number>
 waystone issue comment --source owner/repo --issue <number>
 waystone issue close --source owner/repo --issue <number>
 waystone issue reopen --source owner/repo --issue <number>
+waystone issue label add --source owner/repo --issue <number> <label>
+waystone issue label remove --source owner/repo --issue <number> <label>
 waystone issue search <text>
 waystone issue search --state open <text>
 waystone issue list --source waystone:owner/repo --state closed
@@ -214,6 +216,7 @@ waystone pr comments <number>
 waystone pr timeline <number>
 
 waystone label list
+waystone label create --source owner/repo --slug <slug> --name <name>
 waystone milestone list
 
 waystone ledger summary
@@ -260,7 +263,7 @@ The ledger is intended to preserve:
 - operation signatures when a local identity exists
 - source manifest signatures when a local identity exists
 
-Sources are repo-specific namespaces. GitHub imports use `github:owner/repo`; `waystone:owner/repo` is reserved for local Waystone records. Issue, pull request and milestone numbers are source-local, so overlapping numbers across sources do not imply the same record.
+Sources are repo-specific namespaces. Remote imports currently use `github:owner/repo`, `gitlab:group/project`, `forgejo:owner/repo` and `gitea:owner/repo`. `waystone:owner/repo` is reserved for local Waystone records. Issue, pull request and milestone numbers are source-local, so overlapping numbers across sources do not imply the same record.
 
 `waystone migrate report` uses those source namespaces to report what a migration can preserve, what remains local continuation history and what still needs a migration plan. It accepts repeated `--from` values for cross-source reports, keeps provenance separate, detects overlapping source-local numbers and reports ambiguous source metadata without merging records. It is read-only and does not assign target IDs.
 
@@ -379,7 +382,7 @@ Core documents:
 
 Architecture:
 - [docs/architecture/design.md](docs/architecture/design.md), design thesis and product boundary
-- [docs/architecture/object-model.md](docs/architecture/object-model.md), imported records and future event model
+- [docs/architecture/object-model.md](docs/architecture/object-model.md), imported records, local records and event-model direction
 - [docs/architecture/threat-model.md](docs/architecture/threat-model.md), trust, authority and abuse risks
 - [docs/architecture/decisions/](docs/architecture/decisions/), ADRs
 

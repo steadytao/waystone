@@ -49,7 +49,7 @@ func runGitLabImport(ctx context.Context, args []string, stdout io.Writer) error
 		return err
 	}
 	if fs.NArg() != 1 {
-		return errors.New("usage: waystone gitlab import [flags] group/project")
+		return errors.New("usage: waystone gitlab import [--out <dir>] [--api-base <url>] <group/project>")
 	}
 	owner, repo, err := parseRepo(fs.Arg(0))
 	if err != nil {

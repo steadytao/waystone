@@ -41,9 +41,9 @@ The format is plain JSON plus content hashes. It is designed to be inspectable, 
 
 `projects/` stores repository-level metadata.
 
-`imports/` stores source manifests. A source manifest indexes one imported repository.
+`imports/` stores source manifests. A source manifest indexes one source namespace.
 
-`objects/` stores imported records grouped by source.
+`objects/` stores imported and local records grouped by source.
 
 `operations/` stores local command history.
 
@@ -61,9 +61,13 @@ Sources use this form:
 <system>:<owner>/<repo>
 ```
 
-GitHub imports use `github:owner/repo`.
+Remote imports currently use:
+- `github:owner/repo`
+- `gitlab:group/project`
+- `forgejo:owner/repo`
+- `gitea:owner/repo`
 
-`waystone:owner/repo` is reserved for repo-scoped local Waystone records. It exists so future manual or migrated records can share the ledger without colliding with forge-owned numbers.
+`waystone:owner/repo` is reserved for repo-scoped local Waystone records. It lets local issues, local labels, local lifecycle events and future migrated records share the ledger without colliding with forge-owned numbers.
 
 Issue, pull request and milestone numbers are source-local. `github:example/project#1` and `waystone:example/project#1` are different records. Global views order records by source first, then by number, so overlapping numbers stay deterministic.
 
@@ -159,7 +163,7 @@ waystone ledger export --format json --out waystone-ledger.json
 
 `--compact` removes formatting from JSON export only. It does not rewrite the ledger.
 
-Safe import verifies the archive manifest, verifies ledger shape and confirms GitHub sources through authenticated GitHub API access unless `--unsafe` is set.
+Safe import verifies the archive manifest and ledger shape. It confirms GitHub sources through authenticated GitHub API access unless `--unsafe` is set. Remote confirmation for GitLab, Forgejo and Gitea sources is not implemented yet, so those sources rely on archive integrity, source manifests and strict ledger verification.
 
 Import never executes ledger contents.
 

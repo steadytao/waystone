@@ -39,7 +39,7 @@ func runAuditList(args []string, stdout io.Writer) error {
 		return err
 	}
 	if fs.NArg() != 0 {
-		return errors.New("usage: waystone audit list [flags]")
+		return errors.New("usage: waystone audit list [--ledger <dir>] [--source <source>] [--json]")
 	}
 	reader := ledger.Reader{Root: *root}
 	var audits []model.GitHubAudit
@@ -93,7 +93,7 @@ func runAuditShow(args []string, stdout io.Writer) error {
 		return err
 	}
 	if fs.NArg() != 1 {
-		return errors.New("usage: waystone audit show [flags] <audit>")
+		return errors.New("usage: waystone audit show [--ledger <dir>] [--json] [--verbose | --v] <audit>")
 	}
 	audit, err := (ledger.Reader{Root: *root}).Audit(fs.Arg(0))
 	if err != nil {

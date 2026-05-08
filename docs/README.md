@@ -15,7 +15,7 @@ This directory contains the project, architecture, ledger, CLI, security and dev
 ## Architecture
 
 - [`architecture/design.md`](architecture/design.md): product boundary and design principles
-- [`architecture/object-model.md`](architecture/object-model.md): imported records and future event model
+- [`architecture/object-model.md`](architecture/object-model.md): imported records, local records and event-model direction
 - [`architecture/threat-model.md`](architecture/threat-model.md): trust, authority and abuse risks
 - [`architecture/README.md`](architecture/README.md): architecture documentation index
 - [`architecture/decisions/0000-adr-process.md`](architecture/decisions/0000-adr-process.md): ADR process

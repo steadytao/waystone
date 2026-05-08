@@ -53,10 +53,10 @@ func runLabelCreate(args []string, stdout io.Writer) error {
 		return err
 	}
 	if fs.NArg() != 0 {
-		return errors.New("usage: waystone label create --source owner/repo --slug <slug> --name <name> [flags]")
+		return errors.New("usage: waystone label create --source <owner/repo> --slug <slug> --name <name> [--color <hex>] [--description <text>]")
 	}
 	if strings.TrimSpace(*sourceFlag) == "" {
-		return errors.New("label create requires --source owner/repo")
+		return errors.New("label create requires --source <owner/repo>")
 	}
 	slug, err := normalizeLabelSlug(*slugFlag)
 	if err != nil {
