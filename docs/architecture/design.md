@@ -20,7 +20,10 @@ In scope:
 - source manifests
 - operation records
 - ledger export and import
-- future signed local records
+- local issue records
+- local issue lifecycle events
+- migration reports and saved migration plans
+- signed local records
 
 Out of scope for v0:
 - hosting repositories
@@ -42,7 +45,7 @@ I want Waystone to stay:
 - explicit about trust and authority
 - boring before it is clever
 
-The first implementation stores deterministic JSON files. Later local collaboration records should use signed append-only events.
+The first implementation stores deterministic JSON files. Local issue lifecycle commands now write local records and issue events under `waystone:` sources. A fuller append-only event model is still a future design direction rather than the only current representation.
 
 ## Storage Direction
 
@@ -86,32 +89,37 @@ Untrusted records may be retained for audit or moderation but they must not sile
 
 ## Current CLI Direction
 
-The current useful surface is read-only GitHub import and local browsing:
+The current useful surface is read-only import, local issue continuation, ledger verification and migration reporting:
 ```sh
 waystone github import owner/repo
+waystone gitlab import group/project
+waystone forgejo import owner/repo
+waystone gitea import owner/repo
 waystone source default github:owner/repo
 waystone issue list
+waystone issue create --source owner/repo --title "Follow up"
+waystone label create --source owner/repo --slug migration --name "Migration"
+waystone issue label add --source owner/repo --issue 1 migration
+waystone issue comment --source owner/repo --issue 1 --body "Comment"
+waystone issue close --source owner/repo --issue 1
 waystone pr list
 waystone ledger export
 waystone ledger import
+waystone migrate report --from github:owner/repo --from gitlab:group/project --to waystone:owner/repo
+waystone migrate plan --from github:owner/repo --to waystone:owner/repo --out waystone-migration-plan.json
 ```
 
-Later local authoring may add:
+Later collaboration work may add patches and reviews:
 ```sh
-waystone init
-waystone identity init
-waystone issue create
-waystone issue comment
-waystone issue close
 waystone patch submit
 waystone review add
 ```
 
 I'm not adding `waystone serve` until the CLI, ledger model and projection rules are stable.
 
-## First Useful Feature
+## Initial Useful Feature
 
-The first practical feature is read-only GitHub project-history import:
+The first practical feature was read-only GitHub project-history import:
 ```sh
 waystone github import steadytao/waymark
 ```
@@ -129,4 +137,4 @@ The importer preserves:
 - external author identities
 - original GitHub URLs
 
-I'm not doing round-tripping back to GitHub in the first milestone. That would turn a preservation tool into a live forge-integration tool too early.
+I'm not doing round-tripping back to a forge in the first milestone. That would turn a preservation tool into a live forge-integration tool too early.

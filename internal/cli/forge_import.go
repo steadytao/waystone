@@ -83,7 +83,7 @@ func runForgeImport(ctx context.Context, args []string, stdout io.Writer, option
 		return err
 	}
 	if fs.NArg() != 1 {
-		return fmt.Errorf("usage: waystone %s [flags] owner/repo", options.Command)
+		return fmt.Errorf("usage: waystone %s [--out <dir>] [--api-base <url>] <owner/repo>", options.Command)
 	}
 	owner, repo, err := parseRepo(fs.Arg(0))
 	if err != nil {

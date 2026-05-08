@@ -1,6 +1,6 @@
 # Object Model
 
-Waystone v0 models imported project history as portable records. It does not yet model local collaboration as signed events.
+Waystone v0 models imported project history, source-scoped local issue records and local issue lifecycle events as portable ledger records.
 
 ## Imported Record Types
 
@@ -17,7 +17,7 @@ The first ledger supports:
 - source manifest
 - operation record
 
-Every imported record should keep enough source context to remain useful without contacting GitHub again.
+Every imported record should keep enough source context to remain useful without contacting the source forge again.
 
 Common fields:
 - Waystone ID
@@ -52,11 +52,14 @@ A source namespace identifies where a record belongs:
 
 Examples:
 - `github:steadytao/waymark`
+- `gitlab:steadytao/waymark`
+- `forgejo:steadytao/waymark`
+- `gitea:steadytao/waymark`
 - `waystone:steadytao/waymark`
 
 `waystone:` is reserved for repo-scoped local Waystone records. It is not a remote forge namespace.
 
-Display numbers are source-local. An issue, pull request or milestone number must be interpreted with its source namespace. This avoids collisions when a ledger contains GitHub issues, GitLab merge requests, future local records or manually imported history with overlapping numbers.
+Display numbers are source-local. An issue, pull request or milestone number must be interpreted with its source namespace. This avoids collisions when a ledger contains GitHub issues, GitLab merge requests, Forgejo or Gitea records, local Waystone records or manually imported history with overlapping numbers.
 
 ## External Identity
 
@@ -123,7 +126,7 @@ Candidate fields:
 - merged timestamp where available
 - original URL
 
-Waystone won't recreate GitHub's full pull request workflow in v0.
+Waystone won't recreate a forge's full pull request or merge request workflow in v0.
 
 ## Review Comment
 
@@ -155,9 +158,11 @@ Release candidate fields:
 - draft or prerelease flags
 - original URL
 
-## Future Event Model
+## Local Events And Future Event Model
 
-Local Waystone state should later be derived from signed append-only events.
+Waystone already stores local issue lifecycle events for created, edited, labelled, unlabelled, commented, closed and reopened issue history. These events make local history inspectable beside imported forge records.
+
+The longer-term direction is a broader signed append-only event model for more local collaboration state.
 
 Example event:
 ```json
@@ -185,7 +190,7 @@ Waystone must keep these concepts separate:
 
 Examples:
 - an untrusted identity may create a comment event
-- a trusted contributor may add a label in the future
+- a trusted contributor may add a label
 - a maintainer may close an issue
 - a non-maintainer closure event may be retained but excluded from canonical projection
 

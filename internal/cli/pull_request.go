@@ -47,7 +47,7 @@ func runPullRequestShow(args []string, stdout io.Writer) error {
 		return err
 	}
 	if fs.NArg() != 1 {
-		return errors.New("usage: waystone pr show [flags] <number>")
+		return errors.New("usage: waystone pr show [--source <source>] [--with-comments] [--json] <number>")
 	}
 	number, err := parseNumber(fs.Arg(0))
 	if err != nil {
@@ -114,7 +114,7 @@ func runPullRequestComments(args []string, stdout io.Writer) error {
 		return err
 	}
 	if fs.NArg() != 1 {
-		return errors.New("usage: waystone pr comments [flags] <number>")
+		return errors.New("usage: waystone pr comments [--source <source>] [--json] <number>")
 	}
 	number, err := parseNumber(fs.Arg(0))
 	if err != nil {
@@ -154,7 +154,7 @@ func runPullRequestTimeline(args []string, stdout io.Writer) error {
 		return err
 	}
 	if fs.NArg() != 1 {
-		return errors.New("usage: waystone pr timeline [flags] <number>")
+		return errors.New("usage: waystone pr timeline [--source <source>] [--json] <number>")
 	}
 	number, err := parseNumber(fs.Arg(0))
 	if err != nil {
@@ -207,7 +207,7 @@ func runPullRequestSearch(args []string, stdout io.Writer) error {
 		return err
 	}
 	if fs.NArg() != 1 {
-		return errors.New("usage: waystone pr search [flags] <text>")
+		return errors.New("usage: waystone pr search [--source <source>] [--field <field>] <text>")
 	}
 	reader := ledger.Reader{Root: *root}
 	source, sourceSet, err := resolveOptionalSource(reader, *sourceFlag)

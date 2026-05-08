@@ -79,10 +79,10 @@ func runIssueLabelChange(args []string, stdout io.Writer, action string) error {
 		return err
 	}
 	if fs.NArg() != 1 {
-		return errors.New("usage: waystone issue label " + action + " --source owner/repo --issue <number> <label>")
+		return errors.New("usage: waystone issue label " + action + " --source <owner/repo> --issue <number> <label>")
 	}
 	if strings.TrimSpace(*sourceFlag) == "" {
-		return errors.New("issue label " + action + " requires --source owner/repo")
+		return errors.New("issue label " + action + " requires --source <owner/repo>")
 	}
 	if *issueFlag <= 0 {
 		return errors.New("issue label " + action + " requires --issue <number>")
@@ -164,10 +164,10 @@ func runIssueCreate(args []string, stdout io.Writer) error {
 		return err
 	}
 	if fs.NArg() != 0 {
-		return errors.New("usage: waystone issue create --source owner/repo --title <title> [--body <body> | --body-file <path>]")
+		return errors.New("usage: waystone issue create --source <owner/repo> --title <title> [--body <body> | --body-file <file>]")
 	}
 	if strings.TrimSpace(*sourceFlag) == "" {
-		return errors.New("issue create requires --source owner/repo")
+		return errors.New("issue create requires --source <owner/repo>")
 	}
 	if strings.TrimSpace(*title) == "" {
 		return errors.New("issue create requires --title")
@@ -265,10 +265,10 @@ func runIssueEdit(args []string, stdout io.Writer) error {
 		return err
 	}
 	if fs.NArg() != 0 {
-		return errors.New("usage: waystone issue edit --source owner/repo --issue <number> [--title <title>] [--body <body> | --body-file <path>]")
+		return errors.New("usage: waystone issue edit --source <owner/repo> --issue <number> [--title <title>] [--body <body> | --body-file <file>]")
 	}
 	if strings.TrimSpace(*sourceFlag) == "" {
-		return errors.New("issue edit requires --source owner/repo")
+		return errors.New("issue edit requires --source <owner/repo>")
 	}
 	if *issueFlag <= 0 {
 		return errors.New("issue edit requires --issue <number>")
@@ -346,10 +346,10 @@ func runIssueComment(args []string, stdout io.Writer) error {
 		return err
 	}
 	if fs.NArg() != 0 {
-		return errors.New("usage: waystone issue comment --source owner/repo --issue <number> [--body <body> | --body-file <path>]")
+		return errors.New("usage: waystone issue comment --source <owner/repo> --issue <number> [--body <body> | --body-file <file>]")
 	}
 	if strings.TrimSpace(*sourceFlag) == "" {
-		return errors.New("issue comment requires --source owner/repo")
+		return errors.New("issue comment requires --source <owner/repo>")
 	}
 	if *issueFlag <= 0 {
 		return errors.New("issue comment requires --issue <number>")
@@ -419,10 +419,10 @@ func runIssueStateChange(args []string, stdout io.Writer, action string) error {
 		return err
 	}
 	if fs.NArg() != 0 {
-		return fmt.Errorf("usage: waystone issue %s --source owner/repo --issue <number>", action)
+		return fmt.Errorf("usage: waystone issue %s --source <owner/repo> --issue <number>", action)
 	}
 	if strings.TrimSpace(*sourceFlag) == "" {
-		return fmt.Errorf("issue %s requires --source owner/repo", action)
+		return fmt.Errorf("issue %s requires --source <owner/repo>", action)
 	}
 	if *issueFlag <= 0 {
 		return fmt.Errorf("issue %s requires --issue <number>", action)
@@ -849,7 +849,7 @@ func runIssueShow(args []string, stdout io.Writer) error {
 		return err
 	}
 	if fs.NArg() != 1 {
-		return errors.New("usage: waystone issue show [flags] <number>")
+		return errors.New("usage: waystone issue show [--source <source>] [--with-comments] [--json] <number>")
 	}
 	number, err := parseNumber(fs.Arg(0))
 	if err != nil {
@@ -922,7 +922,7 @@ func runIssueComments(args []string, stdout io.Writer) error {
 		return err
 	}
 	if fs.NArg() != 1 {
-		return errors.New("usage: waystone issue comments [flags] <number>")
+		return errors.New("usage: waystone issue comments [--source <source>] [--json] <number>")
 	}
 	number, err := parseNumber(fs.Arg(0))
 	if err != nil {
@@ -963,7 +963,7 @@ func runIssueTimeline(args []string, stdout io.Writer) error {
 		return err
 	}
 	if fs.NArg() != 1 {
-		return errors.New("usage: waystone issue timeline [flags] <number>")
+		return errors.New("usage: waystone issue timeline [--source <source>] [--json] <number>")
 	}
 	number, err := parseNumber(fs.Arg(0))
 	if err != nil {
@@ -1017,7 +1017,7 @@ func runIssueSearch(args []string, stdout io.Writer) error {
 		return err
 	}
 	if fs.NArg() != 1 {
-		return errors.New("usage: waystone issue search [flags] <text>")
+		return errors.New("usage: waystone issue search [--source <source>] [--state <state>] [--field <field>] <text>")
 	}
 	state, err := normalizeIssueStateFilter(*stateFlag)
 	if err != nil {

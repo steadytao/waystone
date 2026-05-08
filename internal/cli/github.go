@@ -159,7 +159,7 @@ func runGitHubAudit(ctx context.Context, args []string, stdout io.Writer) error 
 		return err
 	}
 	if fs.NArg() != 1 {
-		return errors.New("usage: waystone github audit [flags] owner/repo")
+		return errors.New("usage: waystone github audit [--ledger <dir>] [--api-base <url>] <owner/repo>")
 	}
 	owner, repo, err := parseRepo(fs.Arg(0))
 	if err != nil {
@@ -271,7 +271,7 @@ func runGitHubImport(ctx context.Context, args []string, stdout io.Writer, comma
 		return err
 	}
 	if fs.NArg() != 1 {
-		return fmt.Errorf("usage: waystone %s [flags] owner/repo", command)
+		return fmt.Errorf("usage: waystone %s [--out <dir>] [--v] <owner/repo>", command)
 	}
 
 	owner, repo, err := parseRepo(fs.Arg(0))

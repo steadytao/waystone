@@ -9,7 +9,9 @@ Before a release, confirm that Waystone can:
 - run `waystone version --json`
 - run `waystone github auth login` without persisting `GITHUB_TOKEN`
 - run `waystone github import owner/repo` against a test repository
-- store imported project records under `.waystone/projects/github/owner/repo.json`
+- run `waystone gitlab import group/project` against a test project when a GitLab token is available
+- run `waystone forgejo import owner/repo` and `waystone gitea import owner/repo` against test repositories when suitable tokens or public API limits allow
+- store imported project records under `.waystone/projects/<system>/<owner>/<repo>.json`
 - store object records under source-scoped object paths
 - record import operations under `.waystone/operations/`
 - run `waystone ledger verify --strict`
@@ -23,8 +25,13 @@ Before a release, confirm that Waystone can:
 - run `waystone issue list`, `show`, `comments`, `timeline` and `search`
 - run `waystone pr list`, `show`, `comments`, `timeline` and `search`
 - run `waystone label list`
+- run `waystone label create`
 - run `waystone milestone list`
 - run `waystone source list`, `show`, `inspect`, `default` and `refresh`
+- run `waystone migrate report`
+- run `waystone migrate plan`
+
+For `v0.2.0-alpha.1`, this means the current single-source plan plus cross-source report surface. Later `v0.2` prereleases should raise the bar as multi-source planning, plan inspection, plan verification, loss reporting and conformance fixtures land.
 
 ## Documentation
 
@@ -73,7 +80,7 @@ Before closing a release, confirm that:
 Before a release, confirm that the release has not silently drifted into:
 - hosted forge behaviour
 - CI execution
-- OAuth app hosting beyond GitHub device flow
+- OAuth app hosting beyond device flow
 - public directory behaviour
 - attachment hosting
 - arbitrary automation
@@ -96,3 +103,18 @@ Before tagging:
 - confirm docs and release scripts from a clean checkout
 
 If the README still needs to explain away missing core behaviour, the release is not ready.
+
+## v0.2 Release Gates
+
+The `v0.2` line is the bridge-ready migration-contract line.
+
+Expected gates:
+- `v0.2.0-alpha.1`, current multi-forge import, local continuation, migration report, single-source migration plan and cross-source report checkpoint
+- `v0.2.0-alpha.2`, multi-source migration plan
+- `v0.2.0-alpha.3`, migration plan inspection and migration plan verification
+- `v0.2.0-beta.1`, multi-forge conformance fixture and migration identity documentation
+- `v0.2.0-beta.2`, safe strategy file and structured loss report
+- `v0.2.0-rc.1`, conformance fixtures and compatibility policy
+- `v0.2.0`, stable enough for a separate bridge tool to consume the migration contract
+
+After `v0.2.0-rc.1`, only bugs, docs and compatibility fixes should enter the release line.

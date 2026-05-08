@@ -12,7 +12,7 @@ Its purpose is to make the project's intended shape, scope, trust model and majo
 
 ### Object Model
 
-[`docs/architecture/object-model.md`](object-model.md) defines imported records and the future event model.
+[`docs/architecture/object-model.md`](object-model.md) defines imported records, local records and event-model direction.
 
 ### Threat Model
 

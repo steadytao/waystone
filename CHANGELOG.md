@@ -8,6 +8,24 @@ The format is based on Keep a Changelog and Waystone intends to follow Semantic 
 
 ### Added
 
+Nothing yet
+
+### Changed
+
+Nothing yet
+
+### Fixed
+
+Nothing yet
+
+### Removed
+
+Nothing yet
+
+## [v0.2.0-alpha.1] - 2026-05-08
+
+### Added
+
 - Local labelled issue round-trip validation for strict verify, archive export, archive inspect, archive import and imported-ledger verification
 - `waystone migrate report --from <source> --to <source>` for read-only migration preservation and gap reporting
 - Repeated `--from` support for cross-source migration reports with per-source counts and ambiguity warnings
@@ -19,18 +37,20 @@ The format is based on Keep a Changelog and Waystone intends to follow Semantic 
 - `waystone forgejo import owner/repo` for read-only Forgejo repository history import
 - `waystone gitea import owner/repo` for read-only Gitea repository history import
 - ADR 0019 for separate Forgejo and Gitea read-only import scope and constraints
+- Command-specific help through `waystone help <command>` and `waystone <command> help <subcommand>`
 
 ### Changed
 
 - Renamed the migration report strategy flag to `--numbering-strategy`
+- Reworked top-level CLI help into Git-style command groups
+- Replaced generic usage placeholders with concrete required and optional arguments
+- Updated CLI, ledger, operation, architecture, release and roadmap documentation for the current command surface
+- Documented the `v0.2` release line as the bridge-ready migration-contract line
 
 ### Fixed
 
-Nothing yet
-
-### Removed
-
-Nothing yet
+- Release verification now checks the current ledger verification help text
+- Release checklist examples now use source-scoped project paths and current import and migration commands
 
 ## [v0.1.0-alpha.1] - 2026-05-06
 

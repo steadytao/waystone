@@ -291,7 +291,7 @@ func runLedgerInspect(args []string, stdout io.Writer) error {
 		return err
 	}
 	if fs.NArg() != 1 {
-		return errors.New("usage: waystone ledger inspect [flags] <archive>")
+		return errors.New("usage: waystone ledger inspect [--json] <archive>")
 	}
 	inspection, err := ledger.InspectArchive(fs.Arg(0))
 	if err != nil {
@@ -328,7 +328,7 @@ func runLedgerImport(ctx context.Context, args []string, stdout io.Writer) error
 		return err
 	}
 	if fs.NArg() != 1 {
-		return errors.New("usage: waystone ledger import [flags] <archive>")
+		return errors.New("usage: waystone ledger import [--ledger <dir>] [--unsafe] <archive>")
 	}
 	if *unsafe {
 		if err := ledger.ImportArchive(fs.Arg(0), *root); err != nil {
@@ -482,7 +482,7 @@ func runLedgerShowOperation(args []string, stdout io.Writer) error {
 		return err
 	}
 	if fs.NArg() != 1 {
-		return errors.New("usage: waystone ledger show-operation [flags] <operation-id>")
+		return errors.New("usage: waystone ledger show-operation [--ledger <dir>] [--json] <operation-id>")
 	}
 	operation, err := (ledger.Reader{Root: *root}).Operation(fs.Arg(0))
 	if err != nil {

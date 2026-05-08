@@ -6,7 +6,7 @@ The main constraint I want to preserve is sequencing. I need to prove one layer 
 
 ## Phase 0: Design Pack
 
-Status: current phase.
+Status: complete enough for the current project stage.
 
 I'm keeping the first public shape small: enough documentation to explain the project, enough code to prove the import and ledger model and enough CI to keep the repo honest.
 
@@ -21,6 +21,8 @@ Deliverables:
 
 ## Phase 1: GitHub Ledger Import
 
+Status: complete enough for the current project stage.
+
 Goal:
 ```text
 Preserve GitHub project history as portable Waystone data.
@@ -33,42 +35,18 @@ waystone ledger export
 waystone ledger import
 ```
 
-Import:
-- issues
-- issue comments
-- labels
-- milestones
-- pull request metadata
-- review comments
-- releases
-- state
-- timestamps
-- external author identities
-- original GitHub URLs
-
-I'm starting with deterministic `.waystone/` files, not Git refs. The `.waystone/` directory is the canonical ledger for now; archives package that ledger rather than replacing it.
-
 This phase is read-only import. I'm not doing GitHub export or round-tripping here because import needs to be boring and trustworthy first.
 
 ## Phase 2: Local Issue Ledger
+
+Status: complete enough for the current project stage.
 
 Goal:
 ```text
 Create and manage portable issues inside a local Git repository.
 ```
 
-Candidate commands:
-```sh
-waystone init
-waystone identity init
-waystone issue create
-waystone issue list
-waystone issue show <id>
-waystone issue comment <id>
-waystone issue close <id>
-```
-
-First local authoring step:
+Current local authoring surface:
 ```sh
 waystone issue create --source owner/repo --title <title>
 waystone label create --source owner/repo --slug <slug> --name <name>
@@ -80,18 +58,23 @@ waystone issue close --source owner/repo --issue <number>
 waystone issue reopen --source owner/repo --issue <number>
 ```
 
-It creates open local issues under `waystone:` sources only and supports local labels, title/body edits plus the first narrow comment, close and reopen lifecycle. Bare `owner/repo` names are accepted for local-authoring commands that do not touch imported forges. Assignment, sync and conflict handling remain deferred.
+This creates local history under `waystone:` sources only. Bare `owner/repo` names are accepted for local-authoring commands that do not touch imported forges. Assignment, milestones, sync and conflict handling remain deferred.
 
-## Phase 3: Migration Reports
+## Phase 3: Multi-forge Import And Migration Reports
+
+Status: complete enough for the current project stage.
 
 Goal:
 ```text
-Explain what migration preserves, transforms or loses before Waystone writes to another forge.
+Prove Waystone is not GitHub-shaped and can report migration risk across multiple source namespaces.
 ```
 
-First command:
+Import commands:
 ```sh
-waystone migrate report --from github:owner/repo --to waystone:owner/repo
+waystone github import owner/repo
+waystone gitlab import group/project
+waystone forgejo import owner/repo
+waystone gitea import owner/repo
 ```
 
 Cross-source report command:
@@ -106,80 +89,174 @@ waystone migrate report \
 
 The migration report is read-only. It counts imported records, local continuation records, identity handling and known gaps such as attachments, user mapping and CI history. Cross-source reports keep source namespaces separate, detect source-local number collisions and warn about ambiguous labels, milestones and authors without merging them.
 
-First plan command:
-```sh
-waystone migrate plan --from github:owner/repo --to waystone:owner/repo --numbering-strategy preserve-source-numbering --out waystone-migration-plan.json
-```
+## Phase 4: Saved Migration Plans
 
-The first migration plan is a saved read-only JSON artefact. It records how source records would map without contacting or mutating a target forge.
-
-I am keeping source IDs immutable. Target IDs are projections, not rewritten source facts.
-
-## Phase 4: Patches And Reviews
-
-Before this phase, Waystone should prove export dry-runs from migration reports.
-
-Current second-forge import commands:
-```sh
-waystone gitlab import group/project
-waystone forgejo import owner/repo
-waystone gitea import owner/repo
-```
+Status: current v0.2 line.
 
 Goal:
 ```text
-Represent reviewable code collaboration records.
+Turn migration reporting into deterministic, reviewable migration-plan artefacts.
 ```
 
-Candidate commands:
+Current single-source plan:
 ```sh
-waystone patch submit
-waystone patch status
-waystone review add
+waystone migrate plan \
+  --from github:owner/repo \
+  --to waystone:owner/repo \
+  --numbering-strategy preserve-source-numbering \
+  --out migration-plan.json
 ```
 
-I'm deferring this until imported records, local issues, identities and authority are stable. Review records are useful but they multiply edge cases quickly.
+Next target:
+```sh
+waystone migrate plan \
+  --from github:owner/repo \
+  --from gitlab:group/project \
+  --from forgejo:owner/repo \
+  --from gitea:owner/repo \
+  --to waystone:owner/repo \
+  --numbering-strategy preserve-source-numbering \
+  --out migration-plan.json
+```
 
-## Phase 5: Sync
+The plan format must preserve original source IDs and source-local numbers. It must not merge GitHub issue `#1`, GitLab issue `#1`, Forgejo issue `#1` and Gitea issue `#1` into one imagined target record.
+
+Release: `v0.2.0-alpha.2`.
+
+## Phase 5: Plan Inspection And Verification
 
 Goal:
 ```text
-Move Waystone data between repositories and collaborators.
+Make migration plans reviewable and independently valid before any export dry-run exists.
 ```
 
-Possible transports:
-- normal Git files
-- dedicated Git refs
-- Git bundles
-- email attachments
-- Radicle bridge
-- ForgeFed bridge
+Planned commands:
+```sh
+waystone migrate inspect migration-plan.json
+waystone migrate verify migration-plan.json
+```
 
-I won't decide the sync model before Phase 1 and Phase 2 produce real constraints. Git refs are attractive, but choosing them too early risks designing around a storage preference instead of a workflow.
+`migrate inspect` should show plan version, from/to sources, strategy axes, record counts, warnings and the fact that target writes are disabled.
 
-## Phase 6: Web Viewer
+`migrate verify` should check JSON shape, supported version, required fields, supported strategy values, duplicate records, source namespaces and deterministic target keys.
+
+Release: `v0.2.0-alpha.3`.
+
+## Phase 6: Conformance And Identity Documentation
 
 Goal:
 ```text
-Render local Waystone state for humans.
+Prove multiple forge shapes can coexist and document identity rules clearly.
 ```
 
-Candidate command:
+Add:
+```text
+docs/migration-identity.md
+testdata/conformance/multi-source-ledger/
+```
+
+The identity rule:
+```text
+Original source identity is evidence. Target identity is a projection.
+```
+
+This phase should prove that matching numbers, labels, milestone names or author names across sources do not imply the same record.
+
+Release: `v0.2.0-beta.1`.
+
+## Phase 7: Strategy File And Structured Loss Report
+
+Goal:
+```text
+Make migration policy explicit and report unsupported data in structured form.
+```
+
+Planned commands:
 ```sh
-waystone serve
+waystone migrate plan \
+  --from github:owner/repo \
+  --from gitlab:group/project \
+  --to waystone:owner/repo \
+  --strategy-file migration-strategy.json \
+  --out migration-plan.json
+
+waystone migrate loss-report \
+  --from github:owner/repo \
+  --from gitlab:group/project \
+  --to waystone:owner/repo \
+  --json
 ```
 
-This should stay a viewer over local projected state, not a hosted forge. I'm deferring it because a web UI can make an immature data model look more finished than it is.
+The first strategy file should accept only safe read-only defaults. The loss report should cover attachments, review threads, CI history, workflows, permissions, branch protections, user mapping, release assets and visibility uncertainty where relevant.
+
+Release: `v0.2.0-beta.2`.
+
+## Phase 8: Compatibility Policy And Fixtures
+
+Goal:
+```text
+Define what another tool may safely consume.
+```
+
+Add:
+```text
+docs/compatibility.md
+testdata/conformance/single-github-ledger/
+testdata/conformance/multi-source-ledger/
+testdata/conformance/local-labelled-issues-ledger/
+testdata/conformance/migration-plan-v1/
+testdata/conformance/migration-loss-report-v1/
+```
+
+At release-candidate stage, no new features should enter the v0.2 scope. Only bugs, docs and compatibility fixes should remain.
+
+Release: `v0.2.0-rc.1`.
+
+## Phase 9: Waystone v0.2.0
+
+Goal:
+```text
+Provide a bridge-ready experimental contract for portable project history and migration planning.
+```
+
+Cut `v0.2.0` when:
+- multi-source report exists
+- multi-source plan exists
+- plan inspect exists
+- plan verify exists
+- loss report exists
+- conformance fixtures exist
+- compatibility policy exists
+- migration identity docs exist
+- all release checks pass
+- docs match CLI behaviour
+- no known blocker remains
+
+This is the point where a separate bridge tool can start consuming Waystone's plan format.
+
+## After v0.2
+
+A future bridge tool may consume Waystone migration plans and produce target-specific export dry-runs. That work should stay outside Waystone. Waystone should not become the place for remote target mutation, provider-specific export policy or forge adapter maintenance.
+
+Waystone v0.3 should be post-bridge hardening based on real findings, not speculative pre-bridge abstraction.
 
 ## Deferred Work
 
-I won't build these early:
+I won't build these before the v0.2 contract is done:
 - hosted forge
 - CI
 - federation
 - public directory
 - attachment hosting
-- GitHub export before GitHub import
-- review workflows before issue workflows
+- live export
+- sync back
+- mirror delegation
+- plugin architecture
+- SQLite canonical storage
+- web UI
+- assignment
+- milestones
+- label editing or deletion
+- local pull requests
 
-Those are not rejected forever. They are deferred because the current project risk is scope creep, not lack of possible features.
+Those are not rejected forever. They are deferred because the current bottleneck is whether Waystone can produce deterministic, reviewable, multi-source migration plans that another tool can consume.

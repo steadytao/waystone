@@ -67,6 +67,164 @@ func TestGlobalAuthCommandIsNotSupported(t *testing.T) {
 	}
 }
 
+func TestTopLevelHelpGroupsCommands(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+
+	if err := Run(context.Background(), []string{"--help"}, &stdout, &stderr); err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	for _, want := range []string{
+		"Usage:",
+		"  waystone <command> [<args>]",
+		"Import and audit commands",
+		"Browse commands",
+		"Local authoring commands",
+		"Ledger commands",
+		"Migration commands",
+		"Identity and source management",
+		"Other commands",
+		"waystone migrate report --from <source> [--from <source>] --to <source>",
+		"See 'waystone help <command>' for more information on a command.",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+		}
+	}
+}
+
+func TestSpecificHelpShowsCommandOptions(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{
+			name: "help migrate report",
+			args: []string{"help", "migrate", "report"},
+			want: []string{
+				"waystone migrate report [--ledger <dir>] --from <source> [--from <source>] --to <source>",
+				"--ledger <dir>",
+				"--numbering-strategy <strategy>",
+			},
+		},
+		{
+			name: "migrate help report",
+			args: []string{"migrate", "help", "report"},
+			want: []string{
+				"waystone migrate report [--ledger <dir>] --from <source> [--from <source>] --to <source>",
+				"--json",
+			},
+		},
+		{
+			name: "help github import",
+			args: []string{"help", "github", "import"},
+			want: []string{
+				"waystone github import [--out <dir>]",
+				"--plain-file-store",
+				"--verbose, --v",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			if err := Run(context.Background(), tt.args, &stdout, &stderr); err != nil {
+				t.Fatalf("Run returned error: %v", err)
+			}
+			for _, want := range tt.want {
+				if !strings.Contains(stdout.String(), want) {
+					t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+				}
+			}
+		})
+	}
+}
+
+func TestSpecificHelpCoversExactSubcommands(t *testing.T) {
+	tests := []struct {
+		topic []string
+		want  []string
+	}{
+		{[]string{"audit", "list"}, []string{"List stored GitHub exit-readiness audits.", "--source <source>"}},
+		{[]string{"audit", "show"}, []string{"Show one stored GitHub exit-readiness audit.", "--verbose, --v"}},
+		{[]string{"forgejo", "import"}, []string{"Import read-only Forgejo project history into a forgejo: source.", "--token-env <name>"}},
+		{[]string{"gitea", "import"}, []string{"Import read-only Gitea project history into a gitea: source.", "--token-env <name>"}},
+		{[]string{"github", "auth", "login"}, []string{"Start GitHub OAuth device-flow authentication.", "--scope <scope>"}},
+		{[]string{"github", "auth", "logout"}, []string{"Delete the stored GitHub token.", "--plain-file-store"}},
+		{[]string{"github", "refresh"}, []string{"Refresh an existing GitHub source.", "--concurrency <n>"}},
+		{[]string{"gitlab", "import"}, []string{"Import read-only GitLab project history into a gitlab: source.", "--token-env <name>"}},
+		{[]string{"identity", "init"}, []string{"Create a local signing identity", "--name <name>"}},
+		{[]string{"identity", "list"}, []string{"List local signing identities", "--json"}},
+		{[]string{"identity", "show"}, []string{"Show the default local signing identity.", "--json"}},
+		{[]string{"identity", "status"}, []string{"Show identity trust counts.", "--json"}},
+		{[]string{"identity", "trust"}, []string{"Mark an identity as trusted", "<identity-id>"}},
+		{[]string{"identity", "untrust"}, []string{"Remove an identity from the local trust policy.", "<identity-id>"}},
+		{[]string{"issue", "create"}, []string{"Create a local issue under a waystone: source.", "--body-file <file>"}},
+		{[]string{"issue", "edit"}, []string{"Edit a local issue under a waystone: source.", "--title <title>"}},
+		{[]string{"issue", "comment"}, []string{"Add a local issue comment.", "--body-file <file>"}},
+		{[]string{"issue", "close"}, []string{"Close a local issue.", "--local"}},
+		{[]string{"issue", "reopen"}, []string{"Reopen a local issue.", "--issue <number>"}},
+		{[]string{"issue", "label", "add"}, []string{"Apply a local label to a local issue.", "<label>"}},
+		{[]string{"issue", "label", "remove"}, []string{"Remove a local label from a local issue.", "<label>"}},
+		{[]string{"issue", "list"}, []string{"List issues from the ledger.", "--state <state>"}},
+		{[]string{"issue", "search"}, []string{"Search issues from the ledger.", "--field <field>"}},
+		{[]string{"issue", "show"}, []string{"Show one issue from the ledger.", "--with-comments"}},
+		{[]string{"issue", "comments"}, []string{"Show issue comments.", "--json"}},
+		{[]string{"issue", "timeline"}, []string{"Show an issue timeline.", "--json"}},
+		{[]string{"label", "list"}, []string{"List labels from the ledger.", "--source <source>"}},
+		{[]string{"label", "create"}, []string{"Create a local label under a waystone: source.", "--description <text>"}},
+		{[]string{"ledger", "doctor"}, []string{"Find practical ledger issues.", "--stale-after <duration>"}},
+		{[]string{"ledger", "diff"}, []string{"Show source changes since an operation.", "--include-verified"}},
+		{[]string{"ledger", "export"}, []string{"Export a ledger archive or JSON snapshot.", "--format <format>"}},
+		{[]string{"ledger", "import"}, []string{"Import a Waystone ledger archive.", "--unsafe"}},
+		{[]string{"ledger", "inspect"}, []string{"Inspect a Waystone ledger archive.", "<archive>"}},
+		{[]string{"ledger", "summary"}, []string{"Summarise ledger record counts.", "--json"}},
+		{[]string{"ledger", "status"}, []string{"Show ledger health and latest operation state.", "--json"}},
+		{[]string{"ledger", "history"}, []string{"List ledger operation records.", "--json"}},
+		{[]string{"ledger", "show-operation"}, []string{"Show one operation record.", "<operation-id>"}},
+		{[]string{"ledger", "verify"}, []string{"Verify ledger files, hashes and optional signatures.", "--operations"}},
+		{[]string{"migrate", "plan"}, []string{"Write a read-only JSON migration plan.", "--out <file>"}},
+		{[]string{"migrate", "report"}, []string{"Generate a read-only migration report", "--from <source>"}},
+		{[]string{"milestone", "list"}, []string{"List milestones from the ledger.", "--source <source>"}},
+		{[]string{"pr", "list"}, []string{"List pull requests and merge requests from the ledger.", "--source <source>"}},
+		{[]string{"pr", "search"}, []string{"Search pull requests and merge requests from the ledger.", "--field <field>"}},
+		{[]string{"pr", "show"}, []string{"Show one pull request or merge request.", "--with-comments"}},
+		{[]string{"pr", "comments"}, []string{"Show pull request or merge request comments.", "--json"}},
+		{[]string{"pr", "timeline"}, []string{"Show a pull request or merge request timeline.", "--json"}},
+		{[]string{"source", "default"}, []string{"Show, set or clear the default source.", "--clear"}},
+		{[]string{"source", "inspect"}, []string{"Inspect one source manifest and referenced objects.", "--stale-after <duration>"}},
+		{[]string{"source", "list"}, []string{"List source manifests in the ledger.", "--json"}},
+		{[]string{"source", "refresh"}, []string{"Refresh source manifests from their remote forge.", "--sources <sources>"}},
+		{[]string{"source", "show"}, []string{"Show one source manifest summary.", "<source>"}},
+		{[]string{"source", "status"}, []string{"Show refresh age and stale status for each source.", "--stale-after <duration>"}},
+		{[]string{"version"}, []string{"Print the Waystone version.", "--json"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(strings.Join(tt.topic, " "), func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			args := append([]string{"help"}, tt.topic...)
+			if err := Run(context.Background(), args, &stdout, &stderr); err != nil {
+				t.Fatalf("Run returned error: %v", err)
+			}
+			for _, want := range tt.want {
+				if !strings.Contains(stdout.String(), want) {
+					t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+				}
+			}
+		})
+	}
+}
+
+func TestSpecificHelpRejectsUnknownTopic(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"help", "nope"}, &stdout, &stderr)
+	if err == nil || !strings.Contains(err.Error(), `unknown help topic "nope"`) {
+		t.Fatalf("Run error = %v, want unknown help topic", err)
+	}
+}
+
 func TestGitHubAuthUsage(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 

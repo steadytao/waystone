@@ -73,7 +73,7 @@ func runSourceDefault(args []string, stdout io.Writer) error {
 	reader := ledger.Reader{Root: *root}
 	if *clear {
 		if fs.NArg() != 0 {
-			return errors.New("usage: waystone source default [flags] [source]")
+			return errors.New("usage: waystone source default [--ledger <dir>] [--clear] [source]")
 		}
 		startedAt := time.Now().UTC()
 		if err := (ledger.Writer{Root: *root}).SetDefaultSource(model.Source{}); err != nil {
@@ -112,7 +112,7 @@ func runSourceDefault(args []string, stdout io.Writer) error {
 		writeField(stdout, "Default source", ledger.SourceSpec(source))
 		return nil
 	default:
-		return errors.New("usage: waystone source default [flags] [source]")
+		return errors.New("usage: waystone source default [--ledger <dir>] [--clear] [source]")
 	}
 }
 
@@ -125,7 +125,7 @@ func runSourceShow(args []string, stdout io.Writer) error {
 		return err
 	}
 	if fs.NArg() != 1 {
-		return errors.New("usage: waystone source show [flags] <source>")
+		return errors.New("usage: waystone source show [--ledger <dir>] [--json] <source>")
 	}
 	source, err := ledger.ParseSourceSpec(fs.Arg(0))
 	if err != nil {
@@ -159,7 +159,7 @@ func runSourceInspect(args []string, stdout io.Writer) error {
 		return err
 	}
 	if fs.NArg() != 1 {
-		return errors.New("usage: waystone source inspect [flags] <source>")
+		return errors.New("usage: waystone source inspect [--ledger <dir>] [--stale-after <duration>] [--json] <source>")
 	}
 	staleDuration, err := parseStaleDuration(*staleAfter)
 	if err != nil {
@@ -228,7 +228,7 @@ func runSourceRefresh(ctx context.Context, args []string, stdout io.Writer) erro
 		return err
 	}
 	if fs.NArg() != 0 {
-		return errors.New("usage: waystone source refresh [flags]")
+		return errors.New("usage: waystone source refresh [--ledger <dir>] [--source <source>] [--sources <sources>]")
 	}
 	reader := ledger.Reader{Root: *root}
 	sources, err := resolveRefreshSources(reader, sourceFlags)
