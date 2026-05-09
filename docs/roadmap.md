@@ -91,14 +91,14 @@ The migration report is read-only. It counts imported records, local continuatio
 
 ## Phase 4: Saved Migration Plans
 
-Status: current v0.2 line.
+Status: implemented in `v0.2.0-alpha.2`.
 
 Goal:
 ```text
 Turn migration reporting into deterministic, reviewable migration-plan artefacts.
 ```
 
-Current single-source plan:
+Single-source plan:
 ```sh
 waystone migrate plan \
   --from github:owner/repo \
@@ -107,7 +107,7 @@ waystone migrate plan \
   --out migration-plan.json
 ```
 
-Next target:
+Multi-source plan:
 ```sh
 waystone migrate plan \
   --from github:owner/repo \

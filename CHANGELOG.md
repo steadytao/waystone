@@ -22,6 +22,21 @@ Nothing yet
 
 Nothing yet
 
+## [v0.2.0-alpha.2] - 2026-05-09
+
+### Added
+
+- Repeated `--from` support for `waystone migrate plan`
+- Explicit source metadata in migration plan sources and records
+- Source-scoped migration target keys under `preserve-source-numbering`
+- Cross-source collision and ambiguity warnings in saved migration plans
+- Release notes for `v0.2.0-alpha.2`
+
+### Changed
+
+- `waystone migrate plan` now sorts plan records deterministically across source namespaces
+- Migration plan documentation now describes multi-source planning as the current v0.2 checkpoint
+
 ## [v0.2.0-alpha.1] - 2026-05-08
 
 ### Added

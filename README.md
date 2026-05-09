@@ -233,6 +233,7 @@ waystone ledger import <archive>
 waystone migrate report --from <source> --to <source>
 waystone migrate report --from <source> --from <source> --to <source>
 waystone migrate plan --from <source> --to <source> --out <file>
+waystone migrate plan --from <source> --from <source> --to <source> --out <file>
 ```
 
 Most browsing commands accept `--source <system>:<owner>/<repo>`, for example `github:owner/repo`. If no source is supplied, Waystone uses the default source in `ledger.json` when one is set.
@@ -267,7 +268,7 @@ Sources are repo-specific namespaces. Remote imports currently use `github:owner
 
 `waystone migrate report` uses those source namespaces to report what a migration can preserve, what remains local continuation history and what still needs a migration plan. It accepts repeated `--from` values for cross-source reports, keeps provenance separate, detects overlapping source-local numbers and reports ambiguous source metadata without merging records. It is read-only and does not assign target IDs.
 
-`waystone migrate plan` writes a read-only JSON plan describing how source records would map under `preserve-source-numbering`. It does not contact or mutate a target forge.
+`waystone migrate plan` writes a read-only JSON plan describing how source records would map under `preserve-source-numbering`. It accepts repeated `--from` values, records the source namespace on each plan record, keeps target keys source-scoped and carries collision and ambiguity warnings into the saved artefact. It does not contact or mutate a target forge.
 
 See [docs/ledger-format.md](docs/ledger-format.md) and [docs/operations.md](docs/operations.md).
 

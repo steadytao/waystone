@@ -42,9 +42,10 @@ Definitions:
 
 `waystone migrate report` will be read-only. It will report preserved records, local continuation records, identity handling and known gaps. It may accept multiple `--from` sources to explain combined history without merging source provenance. It will not create target records, sync remote state or write migration mappings in its first implementation.
 
-`waystone migrate plan` will create a saved `waystone.migration_plan.v1` JSON artefact. The plan describes how records would map under the selected numbering strategy. It does not contact a forge, mutate a target or write ledger operation records.
+`waystone migrate plan` will create a saved `waystone.migration_plan.v1` JSON artefact. The plan describes how records would map under the selected numbering strategy. It may accept multiple `--from` sources, but every plan record must carry its source namespace explicitly. It does not contact a forge, mutate a target or write ledger operation records.
 
 The first plan format will record:
+- source namespace
 - source record ID
 - source number, where the source has one
 - source URL, where available
