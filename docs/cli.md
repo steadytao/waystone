@@ -229,6 +229,8 @@ waystone migrate report --from github:steadytao/waymark --to waystone:steadytao/
 waystone migrate report --from github:steadytao/waymark --to waystone:steadytao/waymark --json
 waystone migrate plan --from github:steadytao/waymark --to waystone:steadytao/waymark --numbering-strategy preserve-source-numbering --out waystone-migration-plan.json
 waystone migrate plan --from github:steadytao/waymark --from gitlab:steadytao/waymark --to waystone:steadytao/waymark --out waystone-migration-plan.json
+waystone migrate inspect waystone-migration-plan.json
+waystone migrate verify waystone-migration-plan.json
 ```
 
 `migrate report` reads local ledger data only. It does not contact a forge, create target records or write operation records.
@@ -240,6 +242,10 @@ Repeated `--from` values produce a cross-source report. Waystone keeps each sour
 `migrate plan` writes a deterministic JSON artefact describing how source records would map under the selected numbering strategy. It accepts one or more repeated `--from` values and keeps each plan record source-scoped. The first implementation supports only `preserve-source-numbering`.
 
 The migration plan uses safe read-only defaults: source authors, labels, milestones, states, timestamps and comments are preserved as source evidence; attachments are link-only; unsupported records are reported; target writes are disabled. Cross-source plans preserve source-local issue and pull request numbers instead of merging matching numbers, names or authors.
+
+`migrate inspect` prints a review summary for a saved plan, including version, sources, target source, strategy values, record counts and warnings. It rejects unknown plan versions unless `--allow-unknown` is supplied.
+
+`migrate verify` validates a saved plan artefact. It checks supported version, safe strategy values, required fields, declared source namespaces, duplicate records, disabled target writes and deterministic target keys under `preserve-source-numbering`.
 
 ## Archive Export And Import
 

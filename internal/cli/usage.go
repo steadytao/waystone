@@ -62,8 +62,10 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  waystone ledger verify [--ledger <dir>] [--strict] [--signatures]")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Migration commands")
+	fmt.Fprintln(w, "  waystone migrate inspect [--allow-unknown] <plan>")
 	fmt.Fprintln(w, "  waystone migrate plan --from <source> [--from <source>] --to <source> --out <file> [--numbering-strategy <strategy>]")
 	fmt.Fprintln(w, "  waystone migrate report --from <source> [--from <source>] --to <source> [--numbering-strategy <strategy>] [--json]")
+	fmt.Fprintln(w, "  waystone migrate verify <plan>")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Identity and source management")
 	fmt.Fprintln(w, "  waystone github auth login [--client-id <id>] [--plain-file-store]")
@@ -661,10 +663,20 @@ Options:
   --local                 include local OS user and hostname in operation records
 `,
 	"migrate": `Usage:
+  waystone migrate inspect [--allow-unknown] <plan>
   waystone migrate plan --from <source> [--from <source>] --to <source> --out <file> [--numbering-strategy <strategy>]
   waystone migrate report --from <source> [--from <source>] --to <source> [--numbering-strategy <strategy>] [--json]
+  waystone migrate verify <plan>
 
 Report migration shape and write read-only migration plans.
+`,
+	"migrate inspect": `Usage:
+  waystone migrate inspect [--allow-unknown] <plan>
+
+Inspect a saved migration plan.
+
+Options:
+  --allow-unknown     inspect an unknown plan version without treating it as an error
 `,
 	"migrate report": `Usage:
   waystone migrate report [--ledger <dir>] --from <source> [--from <source>] --to <source> [--numbering-strategy <strategy>] [--json]
@@ -689,6 +701,11 @@ Options:
   --to <source>                     target source to plan to
   --out <file>                      migration plan output path
   --numbering-strategy <strategy>   numbering strategy, currently preserve-source-numbering
+`,
+	"migrate verify": `Usage:
+  waystone migrate verify <plan>
+
+Verify a saved migration plan artefact.
 `,
 	"milestone": `Usage:
   waystone milestone list [--ledger <dir>] [--source <source>] [--json]
@@ -922,8 +939,10 @@ func printMilestoneUsage(w io.Writer) {
 
 func printMigrateUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage:")
+	fmt.Fprintln(w, "  waystone migrate inspect [--allow-unknown] <plan>")
 	fmt.Fprintln(w, "  waystone migrate plan --from <source> [--from <source>] --to <source> --out <file> [--numbering-strategy <strategy>]")
 	fmt.Fprintln(w, "  waystone migrate report --from <source> [--from <source>] --to <source> [--numbering-strategy <strategy>] [--json]")
+	fmt.Fprintln(w, "  waystone migrate verify <plan>")
 }
 
 func printLedgerUsage(w io.Writer) {

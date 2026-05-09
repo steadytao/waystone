@@ -1325,7 +1325,7 @@ func TestMigratePlanCommandAcceptsRepeatedFrom(t *testing.T) {
 			t.Fatalf("stdout = %q, want %q", stdout.String(), want)
 		}
 	}
-	plan := readMigrationPlan(t, out)
+	plan := readMigrationPlanFixture(t, out)
 	if plan.From != "github:example/project, gitlab:example/project" || len(plan.Sources) != 2 {
 		t.Fatalf("plan sources = %q/%#v, want explicit multi-source plan", plan.From, plan.Sources)
 	}
@@ -1341,7 +1341,7 @@ func TestMigratePlanRecordsIncludeSourceNamespace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("migrate plan returned error: %v", err)
 	}
-	plan := readMigrationPlan(t, out)
+	plan := readMigrationPlanFixture(t, out)
 	for _, record := range plan.Records {
 		if record.Source != "github:example/project" {
 			t.Fatalf("record = %#v, want source namespace", record)
@@ -1373,7 +1373,7 @@ func TestMigratePlanWarnsOnCrossSourceAmbiguity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("migrate plan returned error: %v", err)
 	}
-	plan := readMigrationPlan(t, out)
+	plan := readMigrationPlanFixture(t, out)
 	for _, want := range []string{
 		"Number collision: issue #1 appears in github:example/project and gitlab:example/project",
 		"Number collision: pull request #2 appears in github:example/project and gitlab:example/project",
@@ -1423,10 +1423,159 @@ func TestMigratePlanStableOrderAcrossSources(t *testing.T) {
 	if err := Run(context.Background(), []string{"migrate", "plan", "--ledger", root, "--from", "gitlab:example/project", "--from", "github:example/project", "--to", "waystone:steadytao/waystone", "--out", secondOut}, io.Discard, io.Discard); err != nil {
 		t.Fatalf("second migrate plan returned error: %v", err)
 	}
-	first := readMigrationPlan(t, firstOut)
-	second := readMigrationPlan(t, secondOut)
+	first := readMigrationPlanFixture(t, firstOut)
+	second := readMigrationPlanFixture(t, secondOut)
 	if strings.Join(migrationPlanRecordSourceKeys(first.Records), ",") != strings.Join(migrationPlanRecordSourceKeys(second.Records), ",") {
 		t.Fatalf("record order differs across source flag order:\nfirst:  %v\nsecond: %v", migrationPlanRecordSourceKeys(first.Records), migrationPlanRecordSourceKeys(second.Records))
+	}
+}
+
+func TestMigrateInspectCommandReadsPlan(t *testing.T) {
+	root := writeTestLedger(t)
+	writeTestLedgerSourceWithSystem(t, root, model.Source{System: "gitlab", Owner: "example", Repo: "project"}, sourceFixtureOptions{
+		IssueNumber:       1,
+		PullRequestNumber: 2,
+		LabelName:         "bug",
+		MilestoneTitle:    "v1",
+		AuthorLogin:       "alice",
+	})
+	out := filepath.Join(t.TempDir(), "waystone-migration-plan.json")
+	if err := Run(context.Background(), []string{"migrate", "plan", "--ledger", root, "--from", "github:example/project", "--from", "gitlab:example/project", "--to", "waystone:steadytao/waystone", "--out", out}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("migrate plan returned error: %v", err)
+	}
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"migrate", "inspect", out}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("migrate inspect returned error: %v", err)
+	}
+	for _, want := range []string{
+		"Migration plan",
+		"Version          waystone.migration_plan.v1",
+		"From             github:example/project, gitlab:example/project",
+		"To               waystone:steadytao/waystone",
+		"Records          14",
+		"Target writes    none",
+		"Sources",
+		"github:example/project",
+		"gitlab:example/project",
+		"Issues           2",
+		"Pull requests    2",
+		"Comments         4",
+		"Labels           2",
+		"Warnings",
+		"- Number collision: issue #1 appears in github:example/project and gitlab:example/project",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+		}
+	}
+}
+
+func TestMigrateInspectCommandRejectsUnknownVersion(t *testing.T) {
+	plan := validMigrationPlanFixture()
+	plan.Version = "waystone.migration_plan.v999"
+	path := writeMigrationPlanFixture(t, plan)
+	err := Run(context.Background(), []string{"migrate", "inspect", path}, io.Discard, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "unsupported migration plan version") {
+		t.Fatalf("migrate inspect error = %v, want unsupported version error", err)
+	}
+}
+
+func TestMigrateInspectCommandAllowsUnknownVersionWhenRequested(t *testing.T) {
+	plan := validMigrationPlanFixture()
+	plan.Version = "waystone.migration_plan.v999"
+	path := writeMigrationPlanFixture(t, plan)
+	var stdout, stderr bytes.Buffer
+	err := Run(context.Background(), []string{"migrate", "inspect", "--allow-unknown", path}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("migrate inspect returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Version          waystone.migration_plan.v999") {
+		t.Fatalf("stdout = %q, want unknown version output", stdout.String())
+	}
+}
+
+func TestMigrateVerifyAcceptsValidPlan(t *testing.T) {
+	path := writeMigrationPlanFixture(t, validMigrationPlanFixture())
+	var stdout, stderr bytes.Buffer
+	err := Run(context.Background(), []string{"migrate", "verify", path}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("migrate verify returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Migration plan verified") || !strings.Contains(stdout.String(), "Records          1") {
+		t.Fatalf("stdout = %q, want verification summary", stdout.String())
+	}
+}
+
+func TestMigrateVerifyAcceptsPlanGeneratedByMigratePlan(t *testing.T) {
+	root := writeTestLedger(t)
+	out := filepath.Join(t.TempDir(), "waystone-migration-plan.json")
+	if err := Run(context.Background(), []string{"migrate", "plan", "--ledger", root, "--from", "github:example/project", "--to", "waystone:steadytao/waystone", "--out", out}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("migrate plan returned error: %v", err)
+	}
+	if err := Run(context.Background(), []string{"migrate", "verify", out}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("migrate verify returned error: %v", err)
+	}
+}
+
+func TestMigrateVerifyRejectsUnknownVersion(t *testing.T) {
+	plan := validMigrationPlanFixture()
+	plan.Version = "waystone.migration_plan.v999"
+	path := writeMigrationPlanFixture(t, plan)
+	err := Run(context.Background(), []string{"migrate", "verify", path}, io.Discard, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "unsupported migration plan version") {
+		t.Fatalf("migrate verify error = %v, want unsupported version error", err)
+	}
+}
+
+func TestMigrateVerifyRejectsDuplicateRecords(t *testing.T) {
+	plan := validMigrationPlanFixture()
+	plan.Records = append(plan.Records, plan.Records[0])
+	path := writeMigrationPlanFixture(t, plan)
+	err := Run(context.Background(), []string{"migrate", "verify", path}, io.Discard, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "duplicate migration plan record") {
+		t.Fatalf("migrate verify error = %v, want duplicate record error", err)
+	}
+}
+
+func TestMigrateVerifyRejectsMissingSource(t *testing.T) {
+	plan := validMigrationPlanFixture()
+	plan.Records[0].Source = ""
+	path := writeMigrationPlanFixture(t, plan)
+	err := Run(context.Background(), []string{"migrate", "verify", path}, io.Discard, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "record 0 source is required") {
+		t.Fatalf("migrate verify error = %v, want missing source error", err)
+	}
+}
+
+func TestMigrateVerifyRejectsUnsupportedStrategy(t *testing.T) {
+	plan := validMigrationPlanFixture()
+	plan.Strategy.Numbering = "chronological-renumber"
+	path := writeMigrationPlanFixture(t, plan)
+	err := Run(context.Background(), []string{"migrate", "verify", path}, io.Discard, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "unsupported numbering_strategy") {
+		t.Fatalf("migrate verify error = %v, want unsupported strategy error", err)
+	}
+}
+
+func TestMigrateVerifyRejectsTargetWrites(t *testing.T) {
+	plan := validMigrationPlanFixture()
+	plan.Strategy.TargetWrite = "apply"
+	path := writeMigrationPlanFixture(t, plan)
+	err := Run(context.Background(), []string{"migrate", "verify", path}, io.Discard, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "target_write_strategy must be none") {
+		t.Fatalf("migrate verify error = %v, want target write error", err)
+	}
+}
+
+func TestMigrateVerifyRejectsNonDeterministicTargetKey(t *testing.T) {
+	plan := validMigrationPlanFixture()
+	plan.Records[0].TargetKey = "issue:1"
+	path := writeMigrationPlanFixture(t, plan)
+	err := Run(context.Background(), []string{"migrate", "verify", path}, io.Discard, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "target key") {
+		t.Fatalf("migrate verify error = %v, want target key error", err)
 	}
 }
 
@@ -2813,7 +2962,7 @@ func migrationPlanRecordSourceKeys(records []model.MigrationPlanRecord) []string
 	return keys
 }
 
-func readMigrationPlan(t *testing.T, path string) model.MigrationPlan {
+func readMigrationPlanFixture(t *testing.T, path string) model.MigrationPlan {
 	t.Helper()
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -2841,6 +2990,47 @@ func testStringSliceContains(values []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func validMigrationPlanFixture() model.MigrationPlan {
+	return model.MigrationPlan{
+		Version:     "waystone.migration_plan.v1",
+		CreatedAt:   time.Date(2026, 5, 9, 0, 0, 0, 0, time.UTC),
+		ToolVersion: Version,
+		From:        "github:example/project",
+		Sources: []model.MigrationPlanSource{
+			{Source: "github:example/project"},
+		},
+		To:       "waystone:steadytao/waystone",
+		Strategy: defaultMigrationPlanStrategy(defaultMigrationNumberingStrategy),
+		Records: []model.MigrationPlanRecord{
+			{
+				Object:            "issue",
+				Source:            "github:example/project",
+				SourceID:          "github:issue:10",
+				SourceNumber:      1,
+				SourceURL:         "https://github.com/example/project/issues/1",
+				WaystoneID:        "github:issue:10",
+				TargetSource:      "waystone:steadytao/waystone",
+				TargetKey:         "github:example/project:issue:1",
+				NumberingStrategy: defaultMigrationNumberingStrategy,
+			},
+		},
+		Warnings: []string{"Target writes are disabled"},
+	}
+}
+
+func writeMigrationPlanFixture(t *testing.T, plan model.MigrationPlan) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "migration-plan.json")
+	data, err := json.MarshalIndent(plan, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal migration plan: %v", err)
+	}
+	if err := os.WriteFile(path, append(data, '\n'), 0o644); err != nil {
+		t.Fatalf("write migration plan: %v", err)
+	}
+	return path
 }
 
 func writeTestLedger(t *testing.T) string {

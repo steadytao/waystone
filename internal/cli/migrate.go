@@ -20,6 +20,7 @@ import (
 )
 
 const defaultMigrationNumberingStrategy = "preserve-source-numbering"
+const migrationPlanVersion = "waystone.migration_plan.v1"
 
 type migrationReport struct {
 	From              string                      `json:"from"`
@@ -65,14 +66,62 @@ func runMigrate(args []string, stdout, stderr io.Writer) error {
 	}
 
 	switch args[0] {
+	case "inspect":
+		return runMigrateInspect(args[1:], stdout)
 	case "plan":
 		return runMigratePlan(args[1:], stdout)
 	case "report":
 		return runMigrateReport(args[1:], stdout)
+	case "verify":
+		return runMigrateVerify(args[1:], stdout)
 	default:
 		printMigrateUsage(stderr)
 		return fmt.Errorf("unknown migrate command %q", args[0])
 	}
+}
+
+func runMigrateInspect(args []string, stdout io.Writer) error {
+	fs := flag.NewFlagSet("waystone migrate inspect", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	allowUnknown := fs.Bool("allow-unknown", false, "allow unknown migration plan versions")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		return errors.New("usage: waystone migrate inspect [--allow-unknown] <plan>")
+	}
+	plan, err := readMigrationPlan(fs.Arg(0))
+	if err != nil {
+		return err
+	}
+	if err := validateMigrationPlan(plan, *allowUnknown); err != nil {
+		return err
+	}
+	writeMigrationPlanInspection(stdout, plan)
+	return nil
+}
+
+func runMigrateVerify(args []string, stdout io.Writer) error {
+	fs := flag.NewFlagSet("waystone migrate verify", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		return errors.New("usage: waystone migrate verify <plan>")
+	}
+	plan, err := readMigrationPlan(fs.Arg(0))
+	if err != nil {
+		return err
+	}
+	if err := validateMigrationPlan(plan, false); err != nil {
+		return err
+	}
+	fmt.Fprintln(stdout, "Migration plan verified")
+	writeIndentedField(stdout, "Version", plan.Version)
+	writeIndentedField(stdout, "Records", len(plan.Records))
+	writeIndentedField(stdout, "Target writes", plan.Strategy.TargetWrite)
+	return nil
 }
 
 func runMigrateReport(args []string, stdout io.Writer) error {
@@ -266,7 +315,7 @@ func buildMigrationPlan(reader ledger.Reader, from []model.Source, to model.Sour
 		"Target writes are disabled",
 	)
 	return model.MigrationPlan{
-		Version:     "waystone.migration_plan.v1",
+		Version:     migrationPlanVersion,
 		CreatedAt:   createdAt,
 		ToolVersion: Version,
 		From:        migrationSourceSpecs(from),
@@ -413,6 +462,206 @@ func writeMigrationPlan(path string, plan model.MigrationPlan) error {
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(plan)
+}
+
+func readMigrationPlan(path string) (model.MigrationPlan, error) {
+	file, err := os.Open(path) // #nosec G304 -- path is an explicit user-provided migration plan path.
+	if err != nil {
+		return model.MigrationPlan{}, err
+	}
+	defer file.Close()
+	var plan model.MigrationPlan
+	if err := json.NewDecoder(file).Decode(&plan); err != nil {
+		return model.MigrationPlan{}, err
+	}
+	return plan, nil
+}
+
+func validateMigrationPlan(plan model.MigrationPlan, allowUnknownVersion bool) error {
+	if plan.Version != migrationPlanVersion && !allowUnknownVersion {
+		return fmt.Errorf("unsupported migration plan version %q", plan.Version)
+	}
+	if strings.TrimSpace(plan.From) == "" {
+		return errors.New("migration plan from is required")
+	}
+	if strings.TrimSpace(plan.To) == "" {
+		return errors.New("migration plan to is required")
+	}
+	if err := validateMigrationPlanSources(plan.Sources); err != nil {
+		return err
+	}
+	if err := validateMigrationPlanStrategy(plan.Strategy); err != nil {
+		return err
+	}
+	seen := map[string]bool{}
+	sources := migrationPlanSourceSet(plan.Sources)
+	for i, record := range plan.Records {
+		if err := validateMigrationPlanRecord(i, record, plan.Strategy, sources); err != nil {
+			return err
+		}
+		key := record.Source + "\x00" + record.Object + "\x00" + record.SourceID
+		if seen[key] {
+			return fmt.Errorf("duplicate migration plan record for source %q object %q source_id %q", record.Source, record.Object, record.SourceID)
+		}
+		seen[key] = true
+	}
+	return nil
+}
+
+func validateMigrationPlanSources(sources []model.MigrationPlanSource) error {
+	if len(sources) == 0 {
+		return errors.New("migration plan sources are required")
+	}
+	seen := map[string]bool{}
+	for i, source := range sources {
+		if strings.TrimSpace(source.Source) == "" {
+			return fmt.Errorf("source %d source is required", i)
+		}
+		if seen[source.Source] {
+			return fmt.Errorf("duplicate migration plan source %q", source.Source)
+		}
+		seen[source.Source] = true
+	}
+	return nil
+}
+
+func migrationPlanSourceSet(sources []model.MigrationPlanSource) map[string]bool {
+	set := map[string]bool{}
+	for _, source := range sources {
+		set[source.Source] = true
+	}
+	return set
+}
+
+func validateMigrationPlanStrategy(strategy model.MigrationPlanStrategy) error {
+	expected := defaultMigrationPlanStrategy(defaultMigrationNumberingStrategy)
+	checks := []struct {
+		name string
+		got  string
+		want string
+	}{
+		{"numbering_strategy", strategy.Numbering, expected.Numbering},
+		{"author_mapping_strategy", strategy.AuthorMapping, expected.AuthorMapping},
+		{"label_mapping_strategy", strategy.LabelMapping, expected.LabelMapping},
+		{"milestone_mapping_strategy", strategy.MilestoneMapping, expected.MilestoneMapping},
+		{"state_mapping_strategy", strategy.StateMapping, expected.StateMapping},
+		{"change_proposal_strategy", strategy.ChangeProposal, expected.ChangeProposal},
+		{"timestamp_strategy", strategy.Timestamp, expected.Timestamp},
+		{"collision_strategy", strategy.Collision, expected.Collision},
+		{"attachment_strategy", strategy.Attachment, expected.Attachment},
+		{"visibility_strategy", strategy.Visibility, expected.Visibility},
+		{"comment_strategy", strategy.Comment, expected.Comment},
+		{"unsupported_record_strategy", strategy.UnsupportedRecord, expected.UnsupportedRecord},
+	}
+	for _, check := range checks {
+		if check.got != check.want {
+			return fmt.Errorf("unsupported %s %q", check.name, check.got)
+		}
+	}
+	if strategy.TargetWrite != "none" {
+		return fmt.Errorf("target_write_strategy must be none, got %q", strategy.TargetWrite)
+	}
+	return nil
+}
+
+func validateMigrationPlanRecord(index int, record model.MigrationPlanRecord, strategy model.MigrationPlanStrategy, sources map[string]bool) error {
+	if strings.TrimSpace(record.Object) == "" {
+		return fmt.Errorf("record %d object is required", index)
+	}
+	if strings.TrimSpace(record.Source) == "" {
+		return fmt.Errorf("record %d source is required", index)
+	}
+	if !sources[record.Source] {
+		return fmt.Errorf("record %d source %q is not declared in plan sources", index, record.Source)
+	}
+	if strings.TrimSpace(record.SourceID) == "" {
+		return fmt.Errorf("record %d source_id is required", index)
+	}
+	if strings.TrimSpace(record.WaystoneID) == "" {
+		return fmt.Errorf("record %d waystone_id is required", index)
+	}
+	if strings.TrimSpace(record.TargetSource) == "" {
+		return fmt.Errorf("record %d target_source is required", index)
+	}
+	if strings.TrimSpace(record.TargetKey) == "" {
+		return fmt.Errorf("record %d target_key is required", index)
+	}
+	if record.NumberingStrategy != strategy.Numbering {
+		return fmt.Errorf("record %d numbering_strategy %q does not match plan numbering_strategy %q", index, record.NumberingStrategy, strategy.Numbering)
+	}
+	if strategy.Numbering == defaultMigrationNumberingStrategy {
+		expected := migrationPlanTargetKey(record.Source, record.Object, record.SourceID, record.SourceNumber)
+		if record.TargetKey != expected {
+			return fmt.Errorf("record %d target key %q does not match deterministic target key %q", index, record.TargetKey, expected)
+		}
+	}
+	return nil
+}
+
+func writeMigrationPlanInspection(stdout io.Writer, plan model.MigrationPlan) {
+	counts := migrationPlanRecordCounts(plan.Records)
+	fmt.Fprintln(stdout, "Migration plan")
+	writeIndentedField(stdout, "Version", plan.Version)
+	writeIndentedField(stdout, "From", plan.From)
+	writeIndentedField(stdout, "To", plan.To)
+	writeIndentedField(stdout, "Records", len(plan.Records))
+	writeIndentedField(stdout, "Target writes", plan.Strategy.TargetWrite)
+	fmt.Fprintln(stdout)
+
+	fmt.Fprintln(stdout, "Sources")
+	for _, source := range plan.Sources {
+		fmt.Fprintln(stdout, source.Source)
+	}
+	fmt.Fprintln(stdout)
+
+	fmt.Fprintln(stdout, "Strategy")
+	writeIndentedField(stdout, "Numbering", plan.Strategy.Numbering)
+	writeIndentedField(stdout, "Author mapping", plan.Strategy.AuthorMapping)
+	writeIndentedField(stdout, "Label mapping", plan.Strategy.LabelMapping)
+	writeIndentedField(stdout, "Target writes", plan.Strategy.TargetWrite)
+	fmt.Fprintln(stdout)
+
+	fmt.Fprintln(stdout, "Records")
+	writeIndentedField(stdout, "Issues", counts.Issues)
+	writeIndentedField(stdout, "Pull requests", counts.PullRequests)
+	writeIndentedField(stdout, "Comments", counts.Comments)
+	writeIndentedField(stdout, "Review comments", counts.ReviewComments)
+	writeIndentedField(stdout, "Labels", counts.Labels)
+	writeIndentedField(stdout, "Milestones", counts.Milestones)
+	writeIndentedField(stdout, "Releases", counts.Releases)
+	fmt.Fprintln(stdout)
+
+	fmt.Fprintln(stdout, "Warnings")
+	if len(plan.Warnings) == 0 {
+		fmt.Fprintln(stdout, "- None")
+		return
+	}
+	for _, warning := range plan.Warnings {
+		fmt.Fprintf(stdout, "- %s\n", warning)
+	}
+}
+
+func migrationPlanRecordCounts(records []model.MigrationPlanRecord) migrationRecordCounts {
+	var counts migrationRecordCounts
+	for _, record := range records {
+		switch record.Object {
+		case "issue":
+			counts.Issues++
+		case "pull_request":
+			counts.PullRequests++
+		case "comment":
+			counts.Comments++
+		case "review_comment":
+			counts.ReviewComments++
+		case "label":
+			counts.Labels++
+		case "milestone":
+			counts.Milestones++
+		case "release":
+			counts.Releases++
+		}
+	}
+	return counts
 }
 
 func sourceMigrationRecordCounts(reader ledger.Reader, source model.Source) (migrationRecordCounts, error) {
