@@ -118,14 +118,15 @@ func runMigratePlan(args []string, stdout io.Writer) error {
 	fs := flag.NewFlagSet("waystone migrate plan", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	root := fs.String("ledger", ".waystone", "Waystone ledger directory")
-	fromFlag := fs.String("from", "", "source to plan from, e.g. github:owner/repo")
 	toFlag := fs.String("to", "", "source to plan to, e.g. waystone:owner/repo")
 	strategyFlag := fs.String("numbering-strategy", defaultMigrationNumberingStrategy, "numbering strategy")
 	out := fs.String("out", "", "migration plan output path")
+	var fromFlags valueListFlag
+	fs.Var(&fromFlags, "from", "source to plan from, e.g. github:owner/repo; repeatable or comma-separated")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if fs.NArg() != 0 || *fromFlag == "" || *toFlag == "" || *out == "" {
+	if fs.NArg() != 0 || len(fromFlags) == 0 || *toFlag == "" || *out == "" {
 		return errors.New("usage: waystone migrate plan --from <source> --to <source> --numbering-strategy preserve-source-numbering --out <file>")
 	}
 	strategy, err := normalizeMigrationNumberingStrategy(*strategyFlag)
@@ -133,11 +134,8 @@ func runMigratePlan(args []string, stdout io.Writer) error {
 		return err
 	}
 	reader := ledger.Reader{Root: *root}
-	from, err := ledger.ParseSourceSpec(*fromFlag)
+	from, err := parseMigrationSources(reader, fromFlags)
 	if err != nil {
-		return err
-	}
-	if _, err := reader.Source(from); err != nil {
 		return err
 	}
 	to, err := ledger.ParseSourceSpec(*toFlag)
@@ -245,24 +243,38 @@ func migrationSourceSpecs(sources []model.Source) string {
 	return strings.Join(specs, ", ")
 }
 
-func buildMigrationPlan(reader ledger.Reader, from, to model.Source, numberingStrategy string, createdAt time.Time) (model.MigrationPlan, error) {
-	records, err := sourceMigrationPlanRecords(reader, from, to, numberingStrategy)
+func buildMigrationPlan(reader ledger.Reader, from []model.Source, to model.Source, numberingStrategy string, createdAt time.Time) (model.MigrationPlan, error) {
+	var records []model.MigrationPlanRecord
+	sources := make([]model.MigrationPlanSource, 0, len(from))
+	for _, source := range from {
+		sourceRecords, err := sourceMigrationPlanRecords(reader, source, to, numberingStrategy)
+		if err != nil {
+			return model.MigrationPlan{}, err
+		}
+		records = append(records, sourceRecords...)
+		sources = append(sources, model.MigrationPlanSource{Source: ledger.SourceSpec(source)})
+	}
+	sort.SliceStable(records, func(i, j int) bool {
+		return migrationPlanRecordSortKey(records[i]) < migrationPlanRecordSortKey(records[j])
+	})
+	warnings, err := migrationReportWarnings(reader, from)
 	if err != nil {
 		return model.MigrationPlan{}, err
 	}
+	warnings = append(warnings,
+		"Unsupported records are reported and not silently dropped",
+		"Target writes are disabled",
+	)
 	return model.MigrationPlan{
 		Version:     "waystone.migration_plan.v1",
 		CreatedAt:   createdAt,
 		ToolVersion: Version,
-		From:        ledger.SourceSpec(from),
+		From:        migrationSourceSpecs(from),
+		Sources:     sources,
 		To:          ledger.SourceSpec(to),
 		Strategy:    defaultMigrationPlanStrategy(numberingStrategy),
 		Records:     records,
-		Warnings: []string{
-			"Attachments are recorded as link-only evidence",
-			"Unsupported records are reported and not silently dropped",
-			"Target writes are disabled",
-		},
+		Warnings:    warnings,
 	}, nil
 }
 
@@ -291,7 +303,7 @@ func sourceMigrationPlanRecords(reader ledger.Reader, from, to model.Source, num
 		return nil, err
 	}
 	for _, issue := range issues {
-		records = append(records, migrationPlanRecord("issue", issue.ID, issue.Number, issue.OriginalURL, issue.ID, to, numberingStrategy))
+		records = append(records, migrationPlanRecord("issue", from, issue.ID, issue.Number, issue.OriginalURL, issue.ID, to, numberingStrategy))
 	}
 	pullRequests, err := reader.SourcePullRequests(from)
 	if err != nil {
@@ -303,7 +315,7 @@ func sourceMigrationPlanRecords(reader ledger.Reader, from, to model.Source, num
 			return nil, err
 		}
 		for _, comment := range comments {
-			records = append(records, migrationPlanRecord("comment", comment.ID, 0, comment.OriginalURL, comment.ID, to, numberingStrategy))
+			records = append(records, migrationPlanRecord("comment", from, comment.ID, 0, comment.OriginalURL, comment.ID, to, numberingStrategy))
 		}
 	}
 	for _, pullRequest := range pullRequests {
@@ -312,15 +324,15 @@ func sourceMigrationPlanRecords(reader ledger.Reader, from, to model.Source, num
 			return nil, err
 		}
 		for _, comment := range comments {
-			records = append(records, migrationPlanRecord("comment", comment.ID, 0, comment.OriginalURL, comment.ID, to, numberingStrategy))
+			records = append(records, migrationPlanRecord("comment", from, comment.ID, 0, comment.OriginalURL, comment.ID, to, numberingStrategy))
 		}
-		records = append(records, migrationPlanRecord("pull_request", pullRequest.ID, pullRequest.Number, pullRequest.OriginalURL, pullRequest.ID, to, numberingStrategy))
+		records = append(records, migrationPlanRecord("pull_request", from, pullRequest.ID, pullRequest.Number, pullRequest.OriginalURL, pullRequest.ID, to, numberingStrategy))
 		reviewComments, err := reader.SourceReviewComments(from, pullRequest.Number)
 		if err != nil {
 			return nil, err
 		}
 		for _, comment := range reviewComments {
-			records = append(records, migrationPlanRecord("review_comment", comment.ID, 0, comment.OriginalURL, comment.ID, to, numberingStrategy))
+			records = append(records, migrationPlanRecord("review_comment", from, comment.ID, 0, comment.OriginalURL, comment.ID, to, numberingStrategy))
 		}
 	}
 	labels, err := reader.SourceLabels(from)
@@ -328,46 +340,45 @@ func sourceMigrationPlanRecords(reader ledger.Reader, from, to model.Source, num
 		return nil, err
 	}
 	for _, label := range labels {
-		records = append(records, migrationPlanRecord("label", label.ID, 0, "", label.ID, to, numberingStrategy))
+		records = append(records, migrationPlanRecord("label", from, label.ID, 0, "", label.ID, to, numberingStrategy))
 	}
 	milestones, err := reader.SourceMilestones(from)
 	if err != nil {
 		return nil, err
 	}
 	for _, milestone := range milestones {
-		records = append(records, migrationPlanRecord("milestone", milestone.ID, milestone.Number, milestone.OriginalURL, milestone.ID, to, numberingStrategy))
+		records = append(records, migrationPlanRecord("milestone", from, milestone.ID, milestone.Number, milestone.OriginalURL, milestone.ID, to, numberingStrategy))
 	}
 	releases, err := reader.SourceReleases(from)
 	if err != nil {
 		return nil, err
 	}
 	for _, release := range releases {
-		records = append(records, migrationPlanRecord("release", release.ID, 0, release.OriginalURL, release.ID, to, numberingStrategy))
+		records = append(records, migrationPlanRecord("release", from, release.ID, 0, release.OriginalURL, release.ID, to, numberingStrategy))
 	}
-	sort.SliceStable(records, func(i, j int) bool {
-		return migrationPlanRecordSortKey(records[i]) < migrationPlanRecordSortKey(records[j])
-	})
 	return records, nil
 }
 
-func migrationPlanRecord(object, sourceID string, sourceNumber int, sourceURL, waystoneID string, to model.Source, numberingStrategy string) model.MigrationPlanRecord {
+func migrationPlanRecord(object string, from model.Source, sourceID string, sourceNumber int, sourceURL, waystoneID string, to model.Source, numberingStrategy string) model.MigrationPlanRecord {
+	source := ledger.SourceSpec(from)
 	return model.MigrationPlanRecord{
 		Object:            object,
+		Source:            source,
 		SourceID:          sourceID,
 		SourceNumber:      sourceNumber,
 		SourceURL:         sourceURL,
 		WaystoneID:        waystoneID,
 		TargetSource:      ledger.SourceSpec(to),
-		TargetKey:         migrationPlanTargetKey(object, sourceID, sourceNumber),
+		TargetKey:         migrationPlanTargetKey(source, object, sourceID, sourceNumber),
 		NumberingStrategy: numberingStrategy,
 	}
 }
 
-func migrationPlanTargetKey(object, sourceID string, sourceNumber int) string {
+func migrationPlanTargetKey(source, object, sourceID string, sourceNumber int) string {
 	if sourceNumber > 0 {
-		return fmt.Sprintf("%s:%d", object, sourceNumber)
+		return fmt.Sprintf("%s:%s:%d", source, object, sourceNumber)
 	}
-	return object + ":" + sourceID
+	return fmt.Sprintf("%s:%s:%s", source, object, sourceID)
 }
 
 func migrationPlanRecordSortKey(record model.MigrationPlanRecord) string {
@@ -385,9 +396,9 @@ func migrationPlanRecordSortKey(record model.MigrationPlanRecord) string {
 		prefix = "99"
 	}
 	if record.SourceNumber > 0 {
-		return fmt.Sprintf("%s:%012d:%s", prefix, record.SourceNumber, record.SourceID)
+		return fmt.Sprintf("%s:%s:%012d:%s", record.Source, prefix, record.SourceNumber, record.SourceID)
 	}
-	return prefix + ":" + record.SourceID
+	return record.Source + ":" + prefix + ":" + record.SourceID
 }
 
 func writeMigrationPlan(path string, plan model.MigrationPlan) error {

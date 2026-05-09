@@ -62,7 +62,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  waystone ledger verify [--ledger <dir>] [--strict] [--signatures]")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Migration commands")
-	fmt.Fprintln(w, "  waystone migrate plan --from <source> --to <source> --out <file> [--numbering-strategy <strategy>]")
+	fmt.Fprintln(w, "  waystone migrate plan --from <source> [--from <source>] --to <source> --out <file> [--numbering-strategy <strategy>]")
 	fmt.Fprintln(w, "  waystone migrate report --from <source> [--from <source>] --to <source> [--numbering-strategy <strategy>] [--json]")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Identity and source management")
@@ -661,7 +661,7 @@ Options:
   --local                 include local OS user and hostname in operation records
 `,
 	"migrate": `Usage:
-  waystone migrate plan --from <source> --to <source> --out <file> [--numbering-strategy <strategy>]
+  waystone migrate plan --from <source> [--from <source>] --to <source> --out <file> [--numbering-strategy <strategy>]
   waystone migrate report --from <source> [--from <source>] --to <source> [--numbering-strategy <strategy>] [--json]
 
 Report migration shape and write read-only migration plans.
@@ -679,13 +679,13 @@ Options:
   --json                            write JSON output
 `,
 	"migrate plan": `Usage:
-  waystone migrate plan [--ledger <dir>] --from <source> --to <source> --out <file> [--numbering-strategy <strategy>]
+  waystone migrate plan [--ledger <dir>] --from <source> [--from <source>] --to <source> --out <file> [--numbering-strategy <strategy>]
 
 Write a read-only JSON migration plan.
 
 Options:
   --ledger <dir>                    Waystone ledger directory
-  --from <source>                   source to plan from
+  --from <source>                   source to plan from; repeatable or comma-separated
   --to <source>                     target source to plan to
   --out <file>                      migration plan output path
   --numbering-strategy <strategy>   numbering strategy, currently preserve-source-numbering
@@ -922,7 +922,7 @@ func printMilestoneUsage(w io.Writer) {
 
 func printMigrateUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage:")
-	fmt.Fprintln(w, "  waystone migrate plan --from <source> --to <source> --out <file> [--numbering-strategy <strategy>]")
+	fmt.Fprintln(w, "  waystone migrate plan --from <source> [--from <source>] --to <source> --out <file> [--numbering-strategy <strategy>]")
 	fmt.Fprintln(w, "  waystone migrate report --from <source> [--from <source>] --to <source> [--numbering-strategy <strategy>] [--json]")
 }
 

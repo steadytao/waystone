@@ -10,10 +10,15 @@ type MigrationPlan struct {
 	CreatedAt   time.Time             `json:"created_at"`
 	ToolVersion string                `json:"tool_version"`
 	From        string                `json:"from"`
+	Sources     []MigrationPlanSource `json:"sources,omitempty"`
 	To          string                `json:"to"`
 	Strategy    MigrationPlanStrategy `json:"strategy"`
 	Records     []MigrationPlanRecord `json:"records"`
 	Warnings    []string              `json:"warnings,omitempty"`
+}
+
+type MigrationPlanSource struct {
+	Source string `json:"source"`
 }
 
 type MigrationPlanStrategy struct {
@@ -34,6 +39,7 @@ type MigrationPlanStrategy struct {
 
 type MigrationPlanRecord struct {
 	Object            string   `json:"object"`
+	Source            string   `json:"source"`
 	SourceID          string   `json:"source_id"`
 	SourceNumber      int      `json:"source_number,omitempty"`
 	SourceURL         string   `json:"source_url,omitempty"`

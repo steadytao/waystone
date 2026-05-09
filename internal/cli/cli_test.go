@@ -1269,6 +1269,9 @@ func TestMigratePlanCommandWritesDeterministicPlan(t *testing.T) {
 	if plan.From != "github:example/project" || plan.To != "waystone:steadytao/waystone" {
 		t.Fatalf("plan sources = %q -> %q, want github:example/project -> waystone:steadytao/waystone", plan.From, plan.To)
 	}
+	if len(plan.Sources) != 1 || plan.Sources[0].Source != "github:example/project" {
+		t.Fatalf("plan sources = %#v, want single explicit source", plan.Sources)
+	}
 	if plan.Strategy.Numbering != "preserve-source-numbering" || plan.Strategy.TargetWrite != "none" {
 		t.Fatalf("plan strategy = %#v, want safe read-only defaults", plan.Strategy)
 	}
@@ -1276,10 +1279,10 @@ func TestMigratePlanCommandWritesDeterministicPlan(t *testing.T) {
 		t.Fatalf("record order = %v, want deterministic source record order", got)
 	}
 	first := plan.Records[0]
-	if first.SourceID != "github:issue:10" || first.SourceNumber != 1 || first.SourceURL != "https://github.com/example/project/issues/1" || first.WaystoneID != "github:issue:10" {
+	if first.Source != "github:example/project" || first.SourceID != "github:issue:10" || first.SourceNumber != 1 || first.SourceURL != "https://github.com/example/project/issues/1" || first.WaystoneID != "github:issue:10" {
 		t.Fatalf("first record = %#v, want issue source identity", first)
 	}
-	if first.TargetSource != "waystone:steadytao/waystone" || first.TargetKey == "" || first.NumberingStrategy != "preserve-source-numbering" {
+	if first.TargetSource != "waystone:steadytao/waystone" || first.TargetKey != "github:example/project:issue:1" || first.NumberingStrategy != "preserve-source-numbering" {
 		t.Fatalf("first target mapping = %#v, want read-only target projection", first)
 	}
 	operations, err := (ledger.Reader{Root: root}).Operations()
@@ -1291,6 +1294,108 @@ func TestMigratePlanCommandWritesDeterministicPlan(t *testing.T) {
 	}
 }
 
+func TestMigratePlanCommandAcceptsRepeatedFrom(t *testing.T) {
+	root := writeTestLedger(t)
+	writeTestLedgerSourceWithSystem(t, root, model.Source{System: "gitlab", Owner: "example", Repo: "project"}, sourceFixtureOptions{
+		IssueNumber:       3,
+		PullRequestNumber: 4,
+		LabelName:         "regression",
+		MilestoneTitle:    "v2",
+		AuthorLogin:       "eve",
+	})
+	out := filepath.Join(t.TempDir(), "waystone-migration-plan.json")
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{
+		"migrate", "plan",
+		"--ledger", root,
+		"--from", "github:example/project",
+		"--from", "gitlab:example/project",
+		"--to", "waystone:steadytao/waystone",
+		"--out", out,
+	}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("migrate plan returned error: %v", err)
+	}
+	for _, want := range []string{
+		"From             github:example/project, gitlab:example/project",
+		"Records          14",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+		}
+	}
+	plan := readMigrationPlan(t, out)
+	if plan.From != "github:example/project, gitlab:example/project" || len(plan.Sources) != 2 {
+		t.Fatalf("plan sources = %q/%#v, want explicit multi-source plan", plan.From, plan.Sources)
+	}
+	if got := sourceRecordCounts(plan.Records); got["github:example/project"] != 7 || got["gitlab:example/project"] != 7 {
+		t.Fatalf("source record counts = %#v, want seven records per source", got)
+	}
+}
+
+func TestMigratePlanRecordsIncludeSourceNamespace(t *testing.T) {
+	root := writeTestLedger(t)
+	out := filepath.Join(t.TempDir(), "waystone-migration-plan.json")
+	err := Run(context.Background(), []string{"migrate", "plan", "--ledger", root, "--from", "github:example/project", "--to", "waystone:steadytao/waystone", "--out", out}, io.Discard, io.Discard)
+	if err != nil {
+		t.Fatalf("migrate plan returned error: %v", err)
+	}
+	plan := readMigrationPlan(t, out)
+	for _, record := range plan.Records {
+		if record.Source != "github:example/project" {
+			t.Fatalf("record = %#v, want source namespace", record)
+		}
+		if !strings.HasPrefix(record.TargetKey, "github:example/project:"+record.Object+":") {
+			t.Fatalf("record target key = %q, want source-scoped target key", record.TargetKey)
+		}
+	}
+}
+
+func TestMigratePlanWarnsOnCrossSourceAmbiguity(t *testing.T) {
+	root := writeTestLedger(t)
+	writeTestLedgerSourceWithSystem(t, root, model.Source{System: "gitlab", Owner: "example", Repo: "project"}, sourceFixtureOptions{
+		IssueNumber:       1,
+		PullRequestNumber: 2,
+		LabelName:         "bug",
+		MilestoneTitle:    "v1",
+		AuthorLogin:       "alice",
+	})
+	out := filepath.Join(t.TempDir(), "waystone-migration-plan.json")
+	err := Run(context.Background(), []string{
+		"migrate", "plan",
+		"--ledger", root,
+		"--from", "github:example/project",
+		"--from", "gitlab:example/project",
+		"--to", "waystone:steadytao/waystone",
+		"--out", out,
+	}, io.Discard, io.Discard)
+	if err != nil {
+		t.Fatalf("migrate plan returned error: %v", err)
+	}
+	plan := readMigrationPlan(t, out)
+	for _, want := range []string{
+		"Number collision: issue #1 appears in github:example/project and gitlab:example/project",
+		"Number collision: pull request #2 appears in github:example/project and gitlab:example/project",
+		"Label name overlap: \"bug\" appears in github:example/project and gitlab:example/project",
+		"Milestone title overlap: \"v1\" appears in github:example/project and gitlab:example/project",
+		"Author identity ambiguity: \"alice\" appears in github:example/project and gitlab:example/project",
+	} {
+		if !testStringSliceContains(plan.Warnings, want) {
+			t.Fatalf("warnings = %#v, want %q", plan.Warnings, want)
+		}
+	}
+}
+
+func TestMigratePlanCommandRejectsMissingFrom(t *testing.T) {
+	root := writeTestLedger(t)
+	out := filepath.Join(t.TempDir(), "waystone-migration-plan.json")
+	err := Run(context.Background(), []string{"migrate", "plan", "--ledger", root, "--to", "waystone:steadytao/waystone", "--out", out}, io.Discard, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "usage: waystone migrate plan --from <source> --to <source>") {
+		t.Fatalf("migrate plan error = %v, want missing from usage error", err)
+	}
+}
+
 func TestMigratePlanCommandRejectsUnknownNumberingStrategy(t *testing.T) {
 	root := writeTestLedger(t)
 	out := filepath.Join(t.TempDir(), "waystone-migration-plan.json")
@@ -1298,6 +1403,30 @@ func TestMigratePlanCommandRejectsUnknownNumberingStrategy(t *testing.T) {
 	err := Run(context.Background(), []string{"migrate", "plan", "--ledger", root, "--from", "github:example/project", "--to", "waystone:steadytao/waystone", "--numbering-strategy", "chronological-renumber", "--out", out}, io.Discard, io.Discard)
 	if err == nil || !strings.Contains(err.Error(), "only preserve-source-numbering is supported") {
 		t.Fatalf("migrate plan error = %v, want unsupported v0 strategy error", err)
+	}
+}
+
+func TestMigratePlanStableOrderAcrossSources(t *testing.T) {
+	root := writeTestLedger(t)
+	writeTestLedgerSourceWithSystem(t, root, model.Source{System: "gitlab", Owner: "example", Repo: "project"}, sourceFixtureOptions{
+		IssueNumber:       3,
+		PullRequestNumber: 4,
+		LabelName:         "regression",
+		MilestoneTitle:    "v2",
+		AuthorLogin:       "eve",
+	})
+	firstOut := filepath.Join(t.TempDir(), "first.json")
+	secondOut := filepath.Join(t.TempDir(), "second.json")
+	if err := Run(context.Background(), []string{"migrate", "plan", "--ledger", root, "--from", "github:example/project", "--from", "gitlab:example/project", "--to", "waystone:steadytao/waystone", "--out", firstOut}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("first migrate plan returned error: %v", err)
+	}
+	if err := Run(context.Background(), []string{"migrate", "plan", "--ledger", root, "--from", "gitlab:example/project", "--from", "github:example/project", "--to", "waystone:steadytao/waystone", "--out", secondOut}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("second migrate plan returned error: %v", err)
+	}
+	first := readMigrationPlan(t, firstOut)
+	second := readMigrationPlan(t, secondOut)
+	if strings.Join(migrationPlanRecordSourceKeys(first.Records), ",") != strings.Join(migrationPlanRecordSourceKeys(second.Records), ",") {
+		t.Fatalf("record order differs across source flag order:\nfirst:  %v\nsecond: %v", migrationPlanRecordSourceKeys(first.Records), migrationPlanRecordSourceKeys(second.Records))
 	}
 }
 
@@ -2674,6 +2803,44 @@ func migrationPlanRecordKeys(records []model.MigrationPlanRecord) []string {
 		keys = append(keys, record.Object+":"+id)
 	}
 	return keys
+}
+
+func migrationPlanRecordSourceKeys(records []model.MigrationPlanRecord) []string {
+	keys := make([]string, 0, len(records))
+	for _, record := range records {
+		keys = append(keys, record.Source+":"+record.Object+":"+record.SourceID)
+	}
+	return keys
+}
+
+func readMigrationPlan(t *testing.T, path string) model.MigrationPlan {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read migration plan: %v", err)
+	}
+	var plan model.MigrationPlan
+	if err := json.Unmarshal(data, &plan); err != nil {
+		t.Fatalf("decoding migration plan: %v\n%s", err, data)
+	}
+	return plan
+}
+
+func sourceRecordCounts(records []model.MigrationPlanRecord) map[string]int {
+	counts := map[string]int{}
+	for _, record := range records {
+		counts[record.Source]++
+	}
+	return counts
+}
+
+func testStringSliceContains(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func writeTestLedger(t *testing.T) string {
