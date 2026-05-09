@@ -22,6 +22,19 @@ Nothing yet
 
 Nothing yet
 
+## [v0.2.0-alpha.3] - 2026-05-09
+
+### Added
+
+- `waystone migrate inspect <plan>` for human-readable migration plan review
+- `waystone migrate verify <plan>` for independent migration plan artefact validation
+- Migration plan validation for supported version, safe strategy values, required fields, declared source namespaces, duplicate records, disabled target writes and deterministic target keys
+- Release notes for `v0.2.0-alpha.3`
+
+### Changed
+
+- Migration documentation now describes saved plans as inspectable and independently verifiable artefacts
+
 ## [v0.2.0-alpha.2] - 2026-05-09
 
 ### Added

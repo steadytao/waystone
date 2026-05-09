@@ -125,20 +125,22 @@ Release: `v0.2.0-alpha.2`.
 
 ## Phase 5: Plan Inspection And Verification
 
+Status: implemented in `v0.2.0-alpha.3`.
+
 Goal:
 ```text
 Make migration plans reviewable and independently valid before any export dry-run exists.
 ```
 
-Planned commands:
+Commands:
 ```sh
 waystone migrate inspect migration-plan.json
 waystone migrate verify migration-plan.json
 ```
 
-`migrate inspect` should show plan version, from/to sources, strategy axes, record counts, warnings and the fact that target writes are disabled.
+`migrate inspect` shows plan version, from/to sources, strategy axes, record counts, warnings and the fact that target writes are disabled.
 
-`migrate verify` should check JSON shape, supported version, required fields, supported strategy values, duplicate records, source namespaces and deterministic target keys.
+`migrate verify` checks JSON shape, supported version, required fields, supported strategy values, duplicate records, source namespaces and deterministic target keys.
 
 Release: `v0.2.0-alpha.3`.
 

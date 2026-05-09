@@ -44,6 +44,8 @@ Definitions:
 
 `waystone migrate plan` will create a saved `waystone.migration_plan.v1` JSON artefact. The plan describes how records would map under the selected numbering strategy. It may accept multiple `--from` sources, but every plan record must carry its source namespace explicitly. It does not contact a forge, mutate a target or write ledger operation records.
 
+Waystone will also support local plan inspection and verification. Plan inspection is a human-readable review surface. Plan verification checks that a saved plan uses a supported version, safe read-only strategy values, required source namespaces, unique source records, disabled target writes and deterministic target keys under `preserve-source-numbering`.
+
 The first plan format will record:
 - source namespace
 - source record ID
