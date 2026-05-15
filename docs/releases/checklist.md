@@ -112,7 +112,7 @@ Expected gates:
 - `v0.2.0-alpha.1`, current multi-forge import, local continuation, migration report, single-source migration plan and cross-source report checkpoint
 - `v0.2.0-alpha.2`, multi-source migration plan
 - `v0.2.0-alpha.3`, migration plan inspection and migration plan verification
-- `v0.2.0-beta.1`, multi-forge conformance fixture and migration identity documentation
+- `v0.2.0-beta.1`, multi-forge conformance coverage and migration identity documentation
 - `v0.2.0-beta.2`, safe strategy file and structured loss report
 - `v0.2.0-rc.1`, conformance fixtures and compatibility policy
 - `v0.2.0`, stable enough for a separate bridge tool to consume the migration contract

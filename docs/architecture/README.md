@@ -18,6 +18,10 @@ Its purpose is to make the project's intended shape, scope, trust model and majo
 
 [`docs/architecture/threat-model.md`](threat-model.md) defines the main trust, authority, import and abuse risks.
 
+### Migration Identity
+
+[`docs/migration-identity.md`](../migration-identity.md) defines source, canonical and target identity rules for migration planning.
+
 ### Decisions
 
 [`docs/architecture/decisions/`](decisions/) contains recorded architectural and project-boundary decisions.

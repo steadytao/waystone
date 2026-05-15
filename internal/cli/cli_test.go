@@ -1430,6 +1430,88 @@ func TestMigratePlanStableOrderAcrossSources(t *testing.T) {
 	}
 }
 
+func TestMigrateMultiForgeConformance(t *testing.T) {
+	root := writeTestLedger(t)
+	for _, system := range []string{"gitlab", "forgejo", "gitea"} {
+		writeTestLedgerSourceWithSystem(t, root, model.Source{System: system, Owner: "example", Repo: "project"}, sourceFixtureOptions{
+			IssueNumber:       1,
+			PullRequestNumber: 2,
+			LabelName:         "bug",
+			MilestoneTitle:    "v1",
+			AuthorLogin:       "alice",
+		})
+	}
+	createLocalIssueAndLabelForSource(t, root, "example/project")
+	if err := Run(context.Background(), []string{"issue", "label", "add", "--ledger", root, "--source", "example/project", "--issue", "1", "bug"}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("issue label add returned error: %v", err)
+	}
+
+	fromArgs := []string{
+		"--from", "github:example/project",
+		"--from", "gitlab:example/project",
+		"--from", "forgejo:example/project",
+		"--from", "gitea:example/project",
+	}
+	reportArgs := append([]string{"migrate", "report", "--ledger", root}, fromArgs...)
+	reportArgs = append(reportArgs, "--to", "waystone:example/project")
+	var reportStdout, reportStderr bytes.Buffer
+	if err := Run(context.Background(), reportArgs, &reportStdout, &reportStderr); err != nil {
+		t.Fatalf("migrate report returned error: %v", err)
+	}
+	for _, want := range []string{
+		"From             github:example/project, gitlab:example/project, forgejo:example/project, gitea:example/project",
+		"Issues           4",
+		"Pull requests    4",
+		"Comments         8",
+		"Labels           4",
+		"Milestones       4",
+		"Local issues     1",
+		"Local labels     1",
+		"Local events     1",
+		"- Number collision: issue #1 appears in github:example/project and gitlab:example/project",
+		"- Number collision: issue #1 appears in github:example/project and forgejo:example/project",
+		"- Number collision: issue #1 appears in github:example/project and gitea:example/project",
+		"- Label name overlap: \"bug\" appears in github:example/project and gitea:example/project",
+		"- Author identity ambiguity: \"alice\" appears in github:example/project and forgejo:example/project",
+	} {
+		if !strings.Contains(reportStdout.String(), want) {
+			t.Fatalf("report stdout = %q, want %q", reportStdout.String(), want)
+		}
+	}
+
+	planPath := filepath.Join(t.TempDir(), "multi-forge-plan.json")
+	planArgs := append([]string{"migrate", "plan", "--ledger", root}, fromArgs...)
+	planArgs = append(planArgs, "--to", "waystone:example/project", "--out", planPath)
+	var planStdout, planStderr bytes.Buffer
+	if err := Run(context.Background(), planArgs, &planStdout, &planStderr); err != nil {
+		t.Fatalf("migrate plan returned error: %v", err)
+	}
+	if !strings.Contains(planStdout.String(), "Records          28") {
+		t.Fatalf("plan stdout = %q, want 28 records", planStdout.String())
+	}
+	plan := readMigrationPlanFixture(t, planPath)
+	if len(plan.Sources) != 4 {
+		t.Fatalf("plan sources = %#v, want four source namespaces", plan.Sources)
+	}
+	for _, source := range []string{"github:example/project", "gitlab:example/project", "forgejo:example/project", "gitea:example/project"} {
+		if got := sourceRecordCounts(plan.Records)[source]; got != 7 {
+			t.Fatalf("plan record count for %s = %d, want 7", source, got)
+		}
+	}
+	for _, record := range plan.Records {
+		if record.Source == "" || !strings.HasPrefix(record.TargetKey, record.Source+":"+record.Object+":") {
+			t.Fatalf("record lost source-scoped identity: %#v", record)
+		}
+	}
+
+	if err := Run(context.Background(), []string{"migrate", "inspect", planPath}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("migrate inspect returned error: %v", err)
+	}
+	if err := Run(context.Background(), []string{"migrate", "verify", planPath}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("migrate verify returned error: %v", err)
+	}
+}
+
 func TestMigrateInspectCommandReadsPlan(t *testing.T) {
 	root := writeTestLedger(t)
 	writeTestLedgerSourceWithSystem(t, root, model.Source{System: "gitlab", Owner: "example", Repo: "project"}, sourceFixtureOptions{
@@ -2921,10 +3003,15 @@ func githubProgress(detail bool, message string) github.Progress {
 
 func createLocalIssueAndLabel(t *testing.T, root string) {
 	t.Helper()
-	if err := Run(context.Background(), []string{"issue", "create", "--ledger", root, "--source", "steadytao/waystone", "--title", "Labelled issue"}, io.Discard, io.Discard); err != nil {
+	createLocalIssueAndLabelForSource(t, root, "steadytao/waystone")
+}
+
+func createLocalIssueAndLabelForSource(t *testing.T, root, source string) {
+	t.Helper()
+	if err := Run(context.Background(), []string{"issue", "create", "--ledger", root, "--source", source, "--title", "Labelled issue"}, io.Discard, io.Discard); err != nil {
 		t.Fatalf("issue create returned error: %v", err)
 	}
-	if err := Run(context.Background(), []string{"label", "create", "--ledger", root, "--source", "steadytao/waystone", "--slug", "bug", "--name", "Software Issue", "--color", "d73a4a"}, io.Discard, io.Discard); err != nil {
+	if err := Run(context.Background(), []string{"label", "create", "--ledger", root, "--source", source, "--slug", "bug", "--name", "Software Issue", "--color", "d73a4a"}, io.Discard, io.Discard); err != nil {
 		t.Fatalf("label create returned error: %v", err)
 	}
 }

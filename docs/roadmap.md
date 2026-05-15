@@ -146,6 +146,8 @@ Release: `v0.2.0-alpha.3`.
 
 ## Phase 6: Conformance And Identity Documentation
 
+Status: implemented in `v0.2.0-beta.1`.
+
 Goal:
 ```text
 Prove multiple forge shapes can coexist and document identity rules clearly.
@@ -154,7 +156,6 @@ Prove multiple forge shapes can coexist and document identity rules clearly.
 Add:
 ```text
 docs/migration-identity.md
-testdata/conformance/multi-source-ledger/
 ```
 
 The identity rule:
@@ -162,7 +163,7 @@ The identity rule:
 Original source identity is evidence. Target identity is a projection.
 ```
 
-This phase should prove that matching numbers, labels, milestone names or author names across sources do not imply the same record.
+This phase proves, through CLI conformance coverage, that GitHub, GitLab, Forgejo, Gitea and local `waystone:` records can coexist without merged provenance. Matching numbers, labels, milestone names or author names across sources do not imply the same record.
 
 Release: `v0.2.0-beta.1`.
 
