@@ -274,6 +274,8 @@ Sources are repo-specific namespaces. Remote imports currently use `github:owner
 
 `waystone migrate inspect` summarises a saved plan for review. `waystone migrate verify` validates the plan artefact independently from ledger verification, including supported version, strategy values, required fields, source namespaces, duplicate records, disabled target writes and deterministic target keys.
 
+Waystone treats original source identity as evidence and target identity as a projection. Matching issue numbers, label names, milestone titles or author logins across sources are reported as ambiguity; they are not silently merged. See [docs/migration-identity.md](docs/migration-identity.md).
+
 See [docs/ledger-format.md](docs/ledger-format.md) and [docs/operations.md](docs/operations.md).
 
 ## Forgejo Import

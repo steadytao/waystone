@@ -22,6 +22,18 @@ Nothing yet
 
 Nothing yet
 
+## [v0.2.0-beta.1] - 2026-05-15
+
+### Added
+
+- Multi-forge migration conformance coverage for GitHub, GitLab, Forgejo, Gitea and local `waystone:` records
+- `docs/migration-identity.md` explaining source identity, canonical Waystone identity and target projections
+- Release notes for `v0.2.0-beta.1`
+
+### Changed
+
+- Roadmap and README documentation now describe migration identity as part of the v0.2 contract
+
 ## [v0.2.0-alpha.3] - 2026-05-09
 
 ### Added

@@ -10,6 +10,7 @@ This directory contains the project, architecture, ledger, CLI, security and dev
 - [`self-import.md`](self-import.md): self-import validation flow
 - [`local-issue-ledger.md`](local-issue-ledger.md): local Waystone issue records
 - [`ledger-format.md`](ledger-format.md): `.waystone/` layout and archive model
+- [`migration-identity.md`](migration-identity.md): source, canonical and target identity rules for migration plans
 - [`roadmap.md`](roadmap.md): phased development plan and migration-report sequencing
 
 ## Architecture
