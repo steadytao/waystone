@@ -2,7 +2,9 @@
   <img src="./.github/banner.svg" alt="Waystone Banner" width="720">
 </p>
 <p align="center">
-  <a href="https://goreportcard.com/report/github.com/steadytao/waystone" rel="noopener noreferrer"><img src="https://goreportcard.com/badge/github.com/steadytao/waystone" alt="Go Report Card"/></a>
+  <a href="https://github.com/steadytao/waystone/actions/workflows/ci-main.yml"><img src="https://github.com/steadytao/waystone/actions/workflows/ci-main.yml/badge.svg"></a>
+  &nbsp;
+  <a href="https://goreportcard.com/report/github.com/steadytao/waystone"><img src="https://goreportcard.com/badge/github.com/steadytao/waystone"></a>
   &nbsp;
   <a href="https://www.bestpractices.dev/projects/12723"><img src="https://www.bestpractices.dev/projects/12723/badge"></a>
   &nbsp;
