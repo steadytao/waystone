@@ -44,6 +44,10 @@ Definitions:
 
 `waystone migrate plan` will create a saved `waystone.migration_plan.v1` JSON artefact. The plan describes how records would map under the selected numbering strategy. It may accept multiple `--from` sources, but every plan record must carry its source namespace explicitly. It does not contact a forge, mutate a target or write ledger operation records.
 
+`waystone migrate plan --strategy-file <file>` will accept a versioned `waystone.migration_strategy.v1` JSON file containing only the safe read-only defaults listed below. Unsupported versions, unknown fields and unsafe target-write settings are rejected.
+
+`waystone migrate loss-report --json` will create a structured `waystone.migration_loss_report.v1` JSON artefact for migration surfaces that are unsupported, partially represented or target-dependent.
+
 Waystone will also support local plan inspection and verification. Plan inspection is a human-readable review surface. Plan verification checks that a saved plan uses a supported version, safe read-only strategy values, required source namespaces, unique source records, disabled target writes and deterministic target keys under `preserve-source-numbering`.
 
 The first plan format will record:
@@ -62,7 +66,7 @@ The first plan format will record:
 
 The first plan implementation will support only `preserve-source-numbering`. The CLI flag is `--numbering-strategy`, not a broad `--strategy`, because numbering is only one migration policy axis.
 
-Future strategy axes may include:
+Strategy axes include:
 - `numbering_strategy`
 - `author_mapping_strategy`
 - `label_mapping_strategy`

@@ -107,6 +107,7 @@ waystone ledger export
 waystone ledger import
 waystone migrate report --from github:owner/repo --from gitlab:group/project --to waystone:owner/repo
 waystone migrate plan --from github:owner/repo --to waystone:owner/repo --out waystone-migration-plan.json
+waystone migrate loss-report --from github:owner/repo --from gitlab:group/project --to waystone:owner/repo --json
 ```
 
 Later collaboration work may add patches and reviews:

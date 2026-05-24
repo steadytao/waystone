@@ -63,7 +63,8 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Migration commands")
 	fmt.Fprintln(w, "  waystone migrate inspect [--allow-unknown] <plan>")
-	fmt.Fprintln(w, "  waystone migrate plan --from <source> [--from <source>] --to <source> --out <file> [--numbering-strategy <strategy>]")
+	fmt.Fprintln(w, "  waystone migrate loss-report --from <source> [--from <source>] --to <source> --json")
+	fmt.Fprintln(w, "  waystone migrate plan --from <source> [--from <source>] --to <source> --out <file> [--numbering-strategy <strategy>] [--strategy-file <file>]")
 	fmt.Fprintln(w, "  waystone migrate report --from <source> [--from <source>] --to <source> [--numbering-strategy <strategy>] [--json]")
 	fmt.Fprintln(w, "  waystone migrate verify <plan>")
 	fmt.Fprintln(w)
@@ -664,7 +665,8 @@ Options:
 `,
 	"migrate": `Usage:
   waystone migrate inspect [--allow-unknown] <plan>
-  waystone migrate plan --from <source> [--from <source>] --to <source> --out <file> [--numbering-strategy <strategy>]
+  waystone migrate loss-report --from <source> [--from <source>] --to <source> --json
+  waystone migrate plan --from <source> [--from <source>] --to <source> --out <file> [--numbering-strategy <strategy>] [--strategy-file <file>]
   waystone migrate report --from <source> [--from <source>] --to <source> [--numbering-strategy <strategy>] [--json]
   waystone migrate verify <plan>
 
@@ -677,6 +679,17 @@ Inspect a saved migration plan.
 
 Options:
   --allow-unknown     inspect an unknown plan version without treating it as an error
+`,
+	"migrate loss-report": `Usage:
+  waystone migrate loss-report [--ledger <dir>] --from <source> [--from <source>] --to <source> --json
+
+Write a structured migration loss report from one or more source namespaces.
+
+Options:
+  --ledger <dir>      Waystone ledger directory
+  --from <source>     source to report from; repeatable or comma-separated
+  --to <source>       target source to report to
+  --json              write JSON output
 `,
 	"migrate report": `Usage:
   waystone migrate report [--ledger <dir>] --from <source> [--from <source>] --to <source> [--numbering-strategy <strategy>] [--json]
@@ -691,7 +704,7 @@ Options:
   --json                            write JSON output
 `,
 	"migrate plan": `Usage:
-  waystone migrate plan [--ledger <dir>] --from <source> [--from <source>] --to <source> --out <file> [--numbering-strategy <strategy>]
+  waystone migrate plan [--ledger <dir>] --from <source> [--from <source>] --to <source> --out <file> [--numbering-strategy <strategy>] [--strategy-file <file>]
 
 Write a read-only JSON migration plan.
 
@@ -701,6 +714,7 @@ Options:
   --to <source>                     target source to plan to
   --out <file>                      migration plan output path
   --numbering-strategy <strategy>   numbering strategy, currently preserve-source-numbering
+  --strategy-file <file>            migration strategy JSON file accepting only safe read-only defaults
 `,
 	"migrate verify": `Usage:
   waystone migrate verify <plan>
@@ -940,7 +954,8 @@ func printMilestoneUsage(w io.Writer) {
 func printMigrateUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage:")
 	fmt.Fprintln(w, "  waystone migrate inspect [--allow-unknown] <plan>")
-	fmt.Fprintln(w, "  waystone migrate plan --from <source> [--from <source>] --to <source> --out <file> [--numbering-strategy <strategy>]")
+	fmt.Fprintln(w, "  waystone migrate loss-report --from <source> [--from <source>] --to <source> --json")
+	fmt.Fprintln(w, "  waystone migrate plan --from <source> [--from <source>] --to <source> --out <file> [--numbering-strategy <strategy>] [--strategy-file <file>]")
 	fmt.Fprintln(w, "  waystone migrate report --from <source> [--from <source>] --to <source> [--numbering-strategy <strategy>] [--json]")
 	fmt.Fprintln(w, "  waystone migrate verify <plan>")
 }

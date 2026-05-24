@@ -228,7 +228,9 @@ waystone migrate report --from github:steadytao/waymark --from gitlab:steadytao/
 waystone migrate report --from github:steadytao/waymark --to waystone:steadytao/waymark --numbering-strategy preserve-source-numbering
 waystone migrate report --from github:steadytao/waymark --to waystone:steadytao/waymark --json
 waystone migrate plan --from github:steadytao/waymark --to waystone:steadytao/waymark --numbering-strategy preserve-source-numbering --out waystone-migration-plan.json
+waystone migrate plan --from github:steadytao/waymark --to waystone:steadytao/waymark --strategy-file migration-strategy.json --out waystone-migration-plan.json
 waystone migrate plan --from github:steadytao/waymark --from gitlab:steadytao/waymark --to waystone:steadytao/waymark --out waystone-migration-plan.json
+waystone migrate loss-report --from github:steadytao/waymark --from gitlab:steadytao/waymark --to waystone:steadytao/waymark --json
 waystone migrate inspect waystone-migration-plan.json
 waystone migrate verify waystone-migration-plan.json
 ```
@@ -242,6 +244,31 @@ Repeated `--from` values produce a cross-source report. Waystone keeps each sour
 `migrate plan` writes a deterministic JSON artefact describing how source records would map under the selected numbering strategy. It accepts one or more repeated `--from` values and keeps each plan record source-scoped. The first implementation supports only `preserve-source-numbering`.
 
 The migration plan uses safe read-only defaults: source authors, labels, milestones, states, timestamps and comments are preserved as source evidence; attachments are link-only; unsupported records are reported; target writes are disabled. Cross-source plans preserve source-local issue and pull request numbers instead of merging matching numbers, names or authors.
+
+`migrate plan --strategy-file <file>` accepts a versioned strategy file containing only the same safe read-only defaults. Unsupported versions, unknown JSON fields or unsafe strategy values are rejected. The current strategy file shape is:
+
+```json
+{
+  "version": "waystone.migration_strategy.v1",
+  "strategy": {
+    "numbering_strategy": "preserve-source-numbering",
+    "author_mapping_strategy": "preserve-source-author",
+    "label_mapping_strategy": "preserve-source-labels",
+    "milestone_mapping_strategy": "preserve-source-milestones",
+    "state_mapping_strategy": "preserve",
+    "change_proposal_strategy": "preserve-source-term",
+    "timestamp_strategy": "preserve-source-time",
+    "collision_strategy": "fail",
+    "attachment_strategy": "link-only",
+    "visibility_strategy": "preserve-where-supported",
+    "comment_strategy": "preserve-order",
+    "unsupported_record_strategy": "report",
+    "target_write_strategy": "none"
+  }
+}
+```
+
+`migrate loss-report --json` writes a structured JSON report for unsupported or partially represented migration surfaces. It currently reports attachments, review-thread semantics, CI history, workflows, permissions, branch protections, user mapping, release assets and visibility uncertainty. It does not contact a target forge and does not write operation records.
 
 `migrate inspect` prints a review summary for a saved plan, including version, sources, target source, strategy values, record counts and warnings. It rejects unknown plan versions unless `--allow-unknown` is supplied.
 

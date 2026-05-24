@@ -21,6 +21,13 @@ import (
 
 const defaultMigrationNumberingStrategy = "preserve-source-numbering"
 const migrationPlanVersion = "waystone.migration_plan.v1"
+const migrationStrategyVersion = "waystone.migration_strategy.v1"
+const migrationLossReportVersion = "waystone.migration_loss_report.v1"
+
+type migrationStrategyFile struct {
+	Version  string                      `json:"version"`
+	Strategy model.MigrationPlanStrategy `json:"strategy"`
+}
 
 type migrationReport struct {
 	From              string                      `json:"from"`
@@ -59,6 +66,24 @@ type migrationContinuationCounts struct {
 	LocalEvents int `json:"local_events"`
 }
 
+type migrationLossReport struct {
+	Version  string                  `json:"version"`
+	From     string                  `json:"from"`
+	To       string                  `json:"to"`
+	Records  migrationRecordCounts   `json:"records"`
+	Sources  []migrationSourceReport `json:"sources,omitempty"`
+	Losses   []migrationLoss         `json:"losses"`
+	Warnings []string                `json:"warnings"`
+}
+
+type migrationLoss struct {
+	Category string   `json:"category"`
+	Status   string   `json:"status"`
+	Scope    string   `json:"scope"`
+	Detail   string   `json:"detail"`
+	Sources  []string `json:"sources,omitempty"`
+}
+
 func runMigrate(args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
 		printMigrateUsage(stderr)
@@ -68,6 +93,8 @@ func runMigrate(args []string, stdout, stderr io.Writer) error {
 	switch args[0] {
 	case "inspect":
 		return runMigrateInspect(args[1:], stdout)
+	case "loss-report":
+		return runMigrateLossReport(args[1:], stdout)
 	case "plan":
 		return runMigratePlan(args[1:], stdout)
 	case "report":
@@ -163,12 +190,43 @@ func runMigrateReport(args []string, stdout io.Writer) error {
 	return nil
 }
 
+func runMigrateLossReport(args []string, stdout io.Writer) error {
+	fs := flag.NewFlagSet("waystone migrate loss-report", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	root := fs.String("ledger", ".waystone", "Waystone ledger directory")
+	toFlag := fs.String("to", "", "source to report to, e.g. waystone:owner/repo")
+	jsonOutput := fs.Bool("json", false, "write JSON output")
+	var fromFlags valueListFlag
+	fs.Var(&fromFlags, "from", "source to report from, e.g. github:owner/repo; repeatable or comma-separated")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 || len(fromFlags) == 0 || *toFlag == "" || !*jsonOutput {
+		return errors.New("usage: waystone migrate loss-report --from <source> --to <source> --json")
+	}
+	reader := ledger.Reader{Root: *root}
+	from, err := parseMigrationSources(reader, fromFlags)
+	if err != nil {
+		return err
+	}
+	to, err := ledger.ParseSourceSpec(*toFlag)
+	if err != nil {
+		return err
+	}
+	report, err := buildMigrationLossReport(reader, from, to)
+	if err != nil {
+		return err
+	}
+	return writeJSONOutput(stdout, report)
+}
+
 func runMigratePlan(args []string, stdout io.Writer) error {
 	fs := flag.NewFlagSet("waystone migrate plan", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	root := fs.String("ledger", ".waystone", "Waystone ledger directory")
 	toFlag := fs.String("to", "", "source to plan to, e.g. waystone:owner/repo")
 	strategyFlag := fs.String("numbering-strategy", defaultMigrationNumberingStrategy, "numbering strategy")
+	strategyFile := fs.String("strategy-file", "", "migration strategy JSON file")
 	out := fs.String("out", "", "migration plan output path")
 	var fromFlags valueListFlag
 	fs.Var(&fromFlags, "from", "source to plan from, e.g. github:owner/repo; repeatable or comma-separated")
@@ -178,7 +236,7 @@ func runMigratePlan(args []string, stdout io.Writer) error {
 	if fs.NArg() != 0 || len(fromFlags) == 0 || *toFlag == "" || *out == "" {
 		return errors.New("usage: waystone migrate plan --from <source> --to <source> --numbering-strategy preserve-source-numbering --out <file>")
 	}
-	strategy, err := normalizeMigrationNumberingStrategy(*strategyFlag)
+	strategy, err := migrationPlanStrategyFromFlags(*strategyFlag, *strategyFile)
 	if err != nil {
 		return err
 	}
@@ -211,6 +269,46 @@ func normalizeMigrationNumberingStrategy(value string) (string, error) {
 		return value, nil
 	}
 	return "", fmt.Errorf("only preserve-source-numbering is supported for migration numbering, got %q", value)
+}
+
+func migrationPlanStrategyFromFlags(numberingStrategy, strategyPath string) (model.MigrationPlanStrategy, error) {
+	numbering, err := normalizeMigrationNumberingStrategy(numberingStrategy)
+	if err != nil {
+		return model.MigrationPlanStrategy{}, err
+	}
+	if strategyPath == "" {
+		return defaultMigrationPlanStrategy(numbering), nil
+	}
+	strategyFile, err := readMigrationStrategyFile(strategyPath)
+	if err != nil {
+		return model.MigrationPlanStrategy{}, err
+	}
+	if err := validateMigrationPlanStrategy(strategyFile.Strategy); err != nil {
+		return model.MigrationPlanStrategy{}, err
+	}
+	return strategyFile.Strategy, nil
+}
+
+func readMigrationStrategyFile(path string) (migrationStrategyFile, error) {
+	file, err := os.Open(path) // #nosec G304 -- path is an explicit user-provided migration strategy path.
+	if err != nil {
+		return migrationStrategyFile{}, err
+	}
+	defer file.Close()
+	decoder := json.NewDecoder(file)
+	decoder.DisallowUnknownFields()
+	var strategy migrationStrategyFile
+	if err := decoder.Decode(&strategy); err != nil {
+		return migrationStrategyFile{}, err
+	}
+	var trailing json.RawMessage
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		return migrationStrategyFile{}, errors.New("migration strategy file must contain exactly one JSON object")
+	}
+	if strategy.Version != migrationStrategyVersion {
+		return migrationStrategyFile{}, fmt.Errorf("unsupported migration strategy version %q", strategy.Version)
+	}
+	return strategy, nil
 }
 
 func parseMigrationSources(reader ledger.Reader, values []string) ([]model.Source, error) {
@@ -292,11 +390,96 @@ func migrationSourceSpecs(sources []model.Source) string {
 	return strings.Join(specs, ", ")
 }
 
-func buildMigrationPlan(reader ledger.Reader, from []model.Source, to model.Source, numberingStrategy string, createdAt time.Time) (model.MigrationPlan, error) {
+func buildMigrationLossReport(reader ledger.Reader, from []model.Source, to model.Source) (migrationLossReport, error) {
+	base, err := buildMigrationReport(reader, from, to, defaultMigrationNumberingStrategy)
+	if err != nil {
+		return migrationLossReport{}, err
+	}
+	return migrationLossReport{
+		Version:  migrationLossReportVersion,
+		From:     base.From,
+		To:       base.To,
+		Records:  base.Records,
+		Sources:  base.Sources,
+		Losses:   defaultMigrationLosses(from),
+		Warnings: base.Warnings,
+	}, nil
+}
+
+func defaultMigrationLosses(sources []model.Source) []migrationLoss {
+	sourceSpecs := make([]string, 0, len(sources))
+	for _, source := range sources {
+		sourceSpecs = append(sourceSpecs, ledger.SourceSpec(source))
+	}
+	return []migrationLoss{
+		{
+			Category: "attachments",
+			Status:   "not_represented",
+			Scope:    "source",
+			Detail:   "Attachment files are not represented in the current ledger contract; original links may remain in imported text.",
+			Sources:  sourceSpecs,
+		},
+		{
+			Category: "review_threads",
+			Status:   "partial",
+			Scope:    "source",
+			Detail:   "Review comments are preserved where imported, but thread resolution and full review-thread semantics are not represented.",
+			Sources:  sourceSpecs,
+		},
+		{
+			Category: "ci_history",
+			Status:   "not_represented",
+			Scope:    "source",
+			Detail:   "CI runs, logs, artefacts and checks are not represented in the current ledger contract.",
+			Sources:  sourceSpecs,
+		},
+		{
+			Category: "workflows",
+			Status:   "not_represented",
+			Scope:    "source",
+			Detail:   "Forge workflow definitions are not imported as executable or portable workflow records.",
+			Sources:  sourceSpecs,
+		},
+		{
+			Category: "permissions",
+			Status:   "not_represented",
+			Scope:    "target",
+			Detail:   "Repository roles, teams and permission rules are not represented by Waystone migration plans.",
+		},
+		{
+			Category: "branch_protections",
+			Status:   "not_represented",
+			Scope:    "target",
+			Detail:   "Branch protection and ruleset semantics are not represented by Waystone migration plans.",
+		},
+		{
+			Category: "user_mapping",
+			Status:   "not_mapped",
+			Scope:    "source",
+			Detail:   "Source author snapshots are preserved as evidence, but users are not mapped to target or local identities.",
+			Sources:  sourceSpecs,
+		},
+		{
+			Category: "release_assets",
+			Status:   "not_represented",
+			Scope:    "source",
+			Detail:   "Release records may be counted, but release asset files are not represented in the current ledger contract.",
+			Sources:  sourceSpecs,
+		},
+		{
+			Category: "visibility",
+			Status:   "uncertain",
+			Scope:    "target",
+			Detail:   "Target visibility and access-control semantics cannot be confirmed without a target-specific bridge.",
+		},
+	}
+}
+
+func buildMigrationPlan(reader ledger.Reader, from []model.Source, to model.Source, strategy model.MigrationPlanStrategy, createdAt time.Time) (model.MigrationPlan, error) {
 	var records []model.MigrationPlanRecord
 	sources := make([]model.MigrationPlanSource, 0, len(from))
 	for _, source := range from {
-		sourceRecords, err := sourceMigrationPlanRecords(reader, source, to, numberingStrategy)
+		sourceRecords, err := sourceMigrationPlanRecords(reader, source, to, strategy.Numbering)
 		if err != nil {
 			return model.MigrationPlan{}, err
 		}
@@ -321,7 +504,7 @@ func buildMigrationPlan(reader ledger.Reader, from []model.Source, to model.Sour
 		From:        migrationSourceSpecs(from),
 		Sources:     sources,
 		To:          ledger.SourceSpec(to),
-		Strategy:    defaultMigrationPlanStrategy(numberingStrategy),
+		Strategy:    strategy,
 		Records:     records,
 		Warnings:    warnings,
 	}, nil

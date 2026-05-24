@@ -63,6 +63,7 @@ The current prototype includes:
 - local issue and pull request search
 - operation records for ledger-changing and verification commands
 - object hashes and strict ledger verification
+- migration reports, saved migration plans, strategy files and structured loss reports
 - local Ed25519 signing for new operation records and source manifests
 - local trust policy for Waystone signing identities
 - ledger archive export, manifest signing, inspection and import
@@ -233,7 +234,9 @@ waystone ledger import <archive>
 waystone migrate report --from <source> --to <source>
 waystone migrate report --from <source> --from <source> --to <source>
 waystone migrate plan --from <source> --to <source> --out <file>
+waystone migrate plan --from <source> --to <source> --strategy-file <file> --out <file>
 waystone migrate plan --from <source> --from <source> --to <source> --out <file>
+waystone migrate loss-report --from <source> --from <source> --to <source> --json
 waystone migrate inspect <plan>
 waystone migrate verify <plan>
 ```
@@ -271,6 +274,8 @@ Sources are repo-specific namespaces. Remote imports currently use `github:owner
 `waystone migrate report` uses those source namespaces to report what a migration can preserve, what remains local continuation history and what still needs a migration plan. It accepts repeated `--from` values for cross-source reports, keeps provenance separate, detects overlapping source-local numbers and reports ambiguous source metadata without merging records. It is read-only and does not assign target IDs.
 
 `waystone migrate plan` writes a read-only JSON plan describing how source records would map under `preserve-source-numbering`. It accepts repeated `--from` values, records the source namespace on each plan record, keeps target keys source-scoped and carries collision and ambiguity warnings into the saved artefact. It does not contact or mutate a target forge.
+
+`waystone migrate plan --strategy-file <file>` accepts a versioned strategy file, currently only with the same safe read-only defaults as generated plans. `waystone migrate loss-report --json` writes structured migration loss evidence for unsupported or partially represented surfaces such as attachments, review-thread semantics, CI history, permissions and release assets.
 
 `waystone migrate inspect` summarises a saved plan for review. `waystone migrate verify` validates the plan artefact independently from ledger verification, including supported version, strategy values, required fields, source namespaces, duplicate records, disabled target writes and deterministic target keys.
 
