@@ -32,7 +32,7 @@ Before a release, confirm that Waystone can:
 - run `waystone migrate plan`
 - run `waystone migrate loss-report`
 
-For `v0.2.0-rc.1`, this means multi-source reports, strategy-file-backed plans, plan inspection, plan verification, structured loss reports, conformance fixtures and compatibility policy. Later `v0.2` prereleases should be limited to release blockers, documentation fixes and compatibility corrections.
+For `v0.2.0`, this means the complete bridge-ready migration contract: multi-source reports, strategy-file-backed plans, plan inspection, plan verification, structured loss reports, conformance fixtures, compatibility policy and final no-blocker hardening.
 
 ## Documentation
 
@@ -116,6 +116,6 @@ Expected gates:
 - `v0.2.0-beta.1`, multi-forge conformance coverage and migration identity documentation
 - `v0.2.0-beta.2`, safe strategy file and structured loss report
 - `v0.2.0-rc.1`, conformance fixtures and compatibility policy
-- `v0.2.0`, stable enough for a separate bridge tool to consume the migration contract
+- `v0.2.0`, final migration-contract release and no-blocker hardening
 
-After `v0.2.0-rc.1`, only bugs, docs and compatibility fixes should enter the release line.
+After `v0.2.0`, changes should target patch releases or the v0.3 line.

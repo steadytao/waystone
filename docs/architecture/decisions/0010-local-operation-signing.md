@@ -10,7 +10,7 @@
 
 Waystone already records operation hashes and previous-operation links. That detects local edits, but it does not bind a new operation to a local Waystone identity.
 
-Signing every object, source manifest and archive at once would freeze too much of the experimental format. Operation records are the correct first boundary because they are the ledger's command history.
+Signing every object, source manifest and archive at once would freeze too much of the pre-1.0 format. Operation records are the correct first boundary because they are the ledger's command history.
 
 ## Decision
 
@@ -30,7 +30,7 @@ This proves that a signed operation was produced by the local private key corres
 
 This does not prove that imported GitHub content was true. It proves what Waystone recorded locally after fetching or verifying data.
 
-Unsigned historical ledgers remain readable while Waystone is experimental.
+Unsigned historical ledgers remain readable while Waystone remains pre-1.0.
 
 Signing does not silently add local OS username, hostname or machine-specific actor metadata. `--local` remains explicit.
 

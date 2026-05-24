@@ -308,7 +308,7 @@ func migrationPlanStrategyFromFlags(numberingStrategy, strategyPath string) (mod
 }
 
 func readMigrationStrategyFile(path string) (migrationStrategyFile, error) {
-	file, err := os.Open(path) // #nosec G304 -- path is an explicit user-provided migration strategy path.
+	file, err := openExplicitFile(path)
 	if err != nil {
 		return migrationStrategyFile{}, err
 	}
@@ -658,7 +658,7 @@ func writeMigrationPlan(path string, plan model.MigrationPlan) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
-	file, err := os.Create(path) // #nosec G304 -- output path is an explicit user-provided migration plan path.
+	file, err := createExplicitFile(path)
 	if err != nil {
 		return err
 	}
@@ -669,7 +669,7 @@ func writeMigrationPlan(path string, plan model.MigrationPlan) error {
 }
 
 func readMigrationPlan(path string) (model.MigrationPlan, error) {
-	file, err := os.Open(path) // #nosec G304 -- path is an explicit user-provided migration plan path.
+	file, err := openExplicitFile(path)
 	if err != nil {
 		return model.MigrationPlan{}, err
 	}

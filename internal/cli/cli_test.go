@@ -2251,6 +2251,23 @@ func TestSourceInspectCommand(t *testing.T) {
 	}
 }
 
+func TestSourceInspectRejectsSymlinkedObjectParent(t *testing.T) {
+	root := writeTestLedger(t)
+	link := filepath.Join(root, "objects", "github", "example", "project", "issues")
+	if err := os.RemoveAll(link); err != nil {
+		t.Fatalf("RemoveAll returned error: %v", err)
+	}
+	if err := os.Symlink(t.TempDir(), link); err != nil {
+		t.Skipf("cannot create symlink: %v", err)
+	}
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{"source", "inspect", "--ledger", root, "github:example/project"}, &stdout, &stderr)
+	if err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("Run error = %v, want symlink rejection", err)
+	}
+}
+
 func TestSourceDefaultCommand(t *testing.T) {
 	root := writeTestLedger(t)
 	var stdout, stderr bytes.Buffer

@@ -30,6 +30,6 @@ Trust decisions are explicit, local and inspectable.
 
 Waystone does not bind signing keys to GitHub accounts, Git identities, SSH keys, PGP identities or any external identity provider in this first trust-policy step.
 
-Old or imported unsigned ledgers remain readable while the format is experimental.
+Old or imported unsigned ledgers remain readable while the format remains pre-1.0.
 
 Future work may add richer trust policy, imported identities or external identity bindings, but those should be separate decisions.

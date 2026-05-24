@@ -198,7 +198,7 @@ Release: `v0.2.0-beta.2`.
 
 ## Phase 8: Compatibility Policy And Fixtures
 
-Status: implemented in `v0.2.0-rc.1`.
+Status: implemented in `v0.2.0-rc.1` and finalised in `v0.2.0`.
 
 Goal:
 ```text
@@ -215,15 +215,17 @@ testdata/conformance/migration-plan-v1/
 testdata/conformance/migration-loss-report-v1/
 ```
 
-At release-candidate stage, no new features should enter the v0.2 scope. Only bugs, docs and compatibility fixes should remain.
+The v0.2.0 release line is closed to new features. Follow-up work should be bug fixes, documentation corrections or compatibility clarifications.
 
-Release: `v0.2.0-rc.1`.
+Release: `v0.2.0-rc.1`, finalised in `v0.2.0`.
 
 ## Phase 9: Waystone v0.2.0
 
+Status: implemented in `v0.2.0`.
+
 Goal:
 ```text
-Provide a bridge-ready experimental contract for portable project history and migration planning.
+Provide a bridge-ready contract for portable project history and migration planning.
 ```
 
 Cut `v0.2.0` when:
@@ -240,6 +242,8 @@ Cut `v0.2.0` when:
 - no known blocker remains
 
 This is the point where a separate bridge tool can start consuming Waystone's plan format.
+
+Release: `v0.2.0`.
 
 ## After v0.2
 

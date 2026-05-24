@@ -223,6 +223,40 @@ func TestExportSourceArchiveRejectsSymlinkedObjectParent(t *testing.T) {
 	}
 }
 
+func TestCopyFileRejectsSymlinkedDestination(t *testing.T) {
+	from := filepath.Join(t.TempDir(), "from.json")
+	if err := os.WriteFile(from, []byte("{}\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile returned error: %v", err)
+	}
+	outside := filepath.Join(t.TempDir(), "outside.json")
+	if err := os.WriteFile(outside, []byte("outside"), 0o600); err != nil {
+		t.Fatalf("WriteFile returned error: %v", err)
+	}
+	to := filepath.Join(t.TempDir(), "to.json")
+	if err := os.Symlink(outside, to); err != nil {
+		t.Skipf("cannot create symlink: %v", err)
+	}
+
+	err := copyFile(from, to)
+	if err == nil {
+		t.Fatal("copyFile returned nil error for symlinked destination")
+	}
+	data, readErr := os.ReadFile(outside)
+	if readErr != nil {
+		t.Fatalf("ReadFile returned error: %v", readErr)
+	}
+	if string(data) != "outside" {
+		t.Fatalf("symlink target content = %q, want unchanged", string(data))
+	}
+}
+
+func TestOpenFileNoSymlinkRejectsDirectory(t *testing.T) {
+	_, err := openFileNoSymlink(t.TempDir())
+	if err == nil || !strings.Contains(err.Error(), "not a regular file") {
+		t.Fatalf("openFileNoSymlink error = %v, want regular file rejection", err)
+	}
+}
+
 func TestWalkArchiveRejectsTooManyEntries(t *testing.T) {
 	archive := filepath.Join(t.TempDir(), "too-many.tar.zst")
 	if err := writeTestArchiveEntries(archive, map[string][]byte{
@@ -335,7 +369,7 @@ func TestSafeRootedPathRejectsTraversal(t *testing.T) {
 }
 
 func archiveEntryNames(path string) ([]string, error) {
-	file, err := os.Open(path) // #nosec G304 -- test opens a temporary archive path.
+	file, err := openUserSelectedFile(path)
 	if err != nil {
 		return nil, err
 	}
@@ -388,7 +422,7 @@ func writeTestArchiveEntries(path string, entries map[string][]byte) error {
 }
 
 func rewriteArchiveEntry(from, to, name string, replacement []byte) error {
-	input, err := os.Open(from) // #nosec G304 -- test opens a temporary archive path.
+	input, err := openUserSelectedFile(from)
 	if err != nil {
 		return err
 	}

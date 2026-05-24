@@ -11,13 +11,7 @@
   <a href="https://scorecard.dev/viewer/?uri=github.com/steadytao/waystone"><img src="https://api.scorecard.dev/projects/github.com/steadytao/waystone/badge"></a>
 </p>
 
-Waystone is a local CLI for exporting and managing portable project history for Git repositories.
-
-Git keeps the code. Waystone keeps the trail.
-
-Waystone imports issues, pull requests, comments, labels, milestones and releases into a local `.waystone/` ledger. The goal is to let a project preserve the context around its code without treating one forge as the permanent owner of that history.
-
-Waystone is experimental research software. It is not ready for production use.
+Waystone is a local CLI for preserving project history alongside Git repositories: it imports issues, pull requests, comments, labels, milestones and releases into a local `.waystone/` ledger so projects can keep the context around their code without treating one forge as the permanent owner of that history.
 
 ## Menu
 
@@ -46,9 +40,9 @@ Waystone is experimental research software. It is not ready for production use.
 
 ## Status
 
-Waystone is in early development.
+Waystone v0.2.0 is an early release focused on the portable ledger and migration-planning contract.
 
-The current prototype includes:
+The current release includes:
 - GitHub OAuth device flow login
 - `GITHUB_TOKEN` override support
 - GitHub repository import
@@ -72,7 +66,7 @@ The current prototype includes:
 - ledger archive export, manifest signing, inspection and import
 - GoReleaser-based release structure with checksums, SBOMs and Sigstore bundles
 
-Published releases will appear here:
+Published releases are available here:
 - <https://github.com/steadytao/waystone/releases>
 
 ## What Waystone Is

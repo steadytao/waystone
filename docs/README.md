@@ -4,7 +4,7 @@ This directory contains the project, architecture, ledger, CLI, security and dev
 
 ## Start Here
 
-- [`../README.md`](../README.md): project summary and current prototype
+- [`../README.md`](../README.md): project summary and current release
 - [`cli.md`](cli.md): command reference
 - [`examples.md`](examples.md): common command workflows
 - [`self-import.md`](self-import.md): self-import validation flow

@@ -172,4 +172,4 @@ Ledger exports include public identities, not private signing keys.
 
 ## Compatibility
 
-The format is experimental. Future changes should prefer explicit migrations over silently accepting incompatible ledgers.
+The format is pre-1.0. Future changes should prefer explicit migrations over silently accepting incompatible ledgers.

@@ -4,6 +4,9 @@
 package auth
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -44,5 +47,45 @@ func TestPlaintextStoreDeleteGitHubToken(t *testing.T) {
 	}
 	if _, err := store.GitHubToken(); err == nil {
 		t.Fatal("GitHubToken returned nil error after delete")
+	}
+}
+
+func TestPlaintextStoreRejectsSymlinkedTokenPath(t *testing.T) {
+	root := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "outside.json")
+	if err := os.WriteFile(outside, []byte("outside"), 0o600); err != nil {
+		t.Fatalf("WriteFile returned error: %v", err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "github.json")); err != nil {
+		t.Skipf("cannot create symlink: %v", err)
+	}
+	store := PlaintextStore{Root: root}
+
+	err := store.SaveGitHubToken(GitHubToken{AccessToken: "token"})
+	if err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("SaveGitHubToken error = %v, want symlink rejection", err)
+	}
+	data, readErr := os.ReadFile(outside)
+	if readErr != nil {
+		t.Fatalf("ReadFile returned error: %v", readErr)
+	}
+	if string(data) != "outside" {
+		t.Fatalf("symlink target content = %q, want unchanged", string(data))
+	}
+	if _, err := store.GitHubToken(); err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("GitHubToken error = %v, want symlink rejection", err)
+	}
+}
+
+func TestPlaintextStoreRejectsSymlinkedRoot(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "store")
+	if err := os.Symlink(t.TempDir(), root); err != nil {
+		t.Skipf("cannot create symlink: %v", err)
+	}
+	store := PlaintextStore{Root: root}
+
+	err := store.SaveGitHubToken(GitHubToken{AccessToken: "token"})
+	if err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("SaveGitHubToken error = %v, want symlink rejection", err)
 	}
 }

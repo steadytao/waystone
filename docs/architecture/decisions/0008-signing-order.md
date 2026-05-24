@@ -33,6 +33,6 @@ This decision means that:
 - operation signing can reuse the canonical operation representation used for operation hashes
 - source manifest signing can build on object refs and operation refs
 - archive signing waits until the inner ledger semantics are stable
-- unsigned ledgers can remain readable while the project is experimental
+- unsigned ledgers can remain readable while the project remains pre-1.0
 
 Signing must not silently add local OS username, hostname or machine-specific metadata.

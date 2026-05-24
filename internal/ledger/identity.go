@@ -101,7 +101,7 @@ func writePrivateKey(root, relative string, privateKey ed25519.PrivateKey) error
 	if err := rejectExistingPrivateKeyPath(path); err != nil {
 		return err
 	}
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600) // #nosec G304 -- key path is rooted under the ledger and checked for symlinks before creation.
+	file, err := createNewFile(path, 0o600)
 	if err != nil {
 		return err
 	}

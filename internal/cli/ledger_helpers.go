@@ -172,11 +172,7 @@ func sourceStatuses(reader ledger.Reader, staleAfter time.Duration, now time.Tim
 
 func inspectSource(root string, source model.Source, staleAfter time.Duration, now time.Time) (sourceInspection, error) {
 	manifestPath := ledger.SourcePath(source)
-	manifestFile, err := ledger.SafeRootedPath(root, manifestPath)
-	if err != nil {
-		return sourceInspection{}, err
-	}
-	manifestHash, err := fileSHA256(manifestFile)
+	manifestHash, err := ledgerFileSHA256(root, manifestPath)
 	if err != nil {
 		return sourceInspection{}, err
 	}
@@ -206,11 +202,7 @@ func inspectSource(root string, source model.Source, staleAfter time.Duration, n
 	}
 	for _, ref := range source.Objects {
 		inspection.ObjectTypes[ref.Object]++
-		objectFile, err := ledger.SafeRootedPath(root, ref.Path)
-		if err != nil {
-			return sourceInspection{}, err
-		}
-		sum, err := fileSHA256(objectFile)
+		sum, err := ledgerFileSHA256(root, ref.Path)
 		if err != nil {
 			if os.IsNotExist(err) {
 				inspection.MissingObjects++
@@ -349,7 +341,7 @@ func formatApproxDuration(duration time.Duration) string {
 
 func writeSourceDefaultOperation(root string, args []string, startedAt time.Time, source model.Source, includeLocal bool) error {
 	finishedAt := time.Now().UTC()
-	sum, err := fileSHA256(filepath.Join(root, "ledger.json"))
+	sum, err := ledgerFileSHA256(root, "ledger.json")
 	if err != nil {
 		return err
 	}
@@ -384,8 +376,8 @@ func writeSourceDefaultOperation(root string, args []string, startedAt time.Time
 	return (ledger.Writer{Root: root}).WriteOperation(operation)
 }
 
-func fileSHA256(path string) (string, error) {
-	file, err := openChecksumFile(path)
+func ledgerFileSHA256(root, relative string) (string, error) {
+	file, err := ledger.OpenRootedFileNoSymlink(root, relative)
 	if err != nil {
 		return "", err
 	}
@@ -397,15 +389,16 @@ func fileSHA256(path string) (string, error) {
 	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
-func openChecksumFile(path string) (*os.File, error) {
-	info, err := os.Lstat(path)
-	if err != nil {
-		return nil, err
-	}
-	if info.Mode()&os.ModeSymlink != 0 {
-		return nil, fmt.Errorf("ledger path %s is a symlink", path)
-	}
-	return os.Open(path) // #nosec G304 -- callers pass ledger metadata paths or paths already scoped by ledger.SafeRootedPath.
+func openExplicitFile(path string) (*os.File, error) {
+	return os.Open(path) // #nosec G304 -- this path is an explicit user-provided input file.
+}
+
+func readExplicitFile(path string) ([]byte, error) {
+	return os.ReadFile(path) // #nosec G304 -- this path is an explicit user-provided input file.
+}
+
+func createExplicitFile(path string) (*os.File, error) {
+	return os.Create(path) // #nosec G304 -- this path is an explicit user-provided output file.
 }
 
 func fileExists(path string) bool {
@@ -414,7 +407,7 @@ func fileExists(path string) bool {
 }
 
 func addLedgerMetadataChange(diff *ledger.Diff, root string, existed bool) error {
-	sum, err := fileSHA256(filepath.Join(root, "ledger.json"))
+	sum, err := ledgerFileSHA256(root, "ledger.json")
 	if err != nil {
 		return err
 	}

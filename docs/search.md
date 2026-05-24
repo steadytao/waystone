@@ -15,7 +15,7 @@ queries focused on the human-written subject and description rather than every
 piece of metadata attached to a record.
 
 Search is case-insensitive and substring-based. It is intentionally simple for
-the current prototype.
+the current release.
 
 ## Source Scope
 
