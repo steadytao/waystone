@@ -1,6 +1,6 @@
 # Security
 
-Waystone is experimental and should not be treated as a security boundary.
+Waystone is local-first project-history tooling and should not be treated as a security boundary.
 
 ## Core Rules
 

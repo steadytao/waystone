@@ -12,7 +12,7 @@ import (
 
 const defaultGitHubOAuthClientID = "Ov23liWNheWsFXT3BnPf"
 
-const Version = "0.0.0-dev"
+const Version = "0.2.0"
 
 func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 {

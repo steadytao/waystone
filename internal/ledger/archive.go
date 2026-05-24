@@ -39,7 +39,7 @@ func ExportArchive(root, archivePath string) error {
 	if err != nil {
 		return err
 	}
-	file, err := os.Create(archivePath) // #nosec G304 -- archive output path is an explicit user-selected destination.
+	file, err := createUserSelectedFile(archivePath)
 	if err != nil {
 		return err
 	}
@@ -192,6 +192,9 @@ func ExportSourceArchive(root, sourceSpec, archivePath string) error {
 		return err
 	}
 	for _, object := range currentSource.Objects {
+		if filepath.ToSlash(object.Path) == filepath.ToSlash(projectPath) {
+			continue
+		}
 		from, err := safeRootedFilePath(root, object.Path)
 		if err != nil {
 			return err
@@ -258,7 +261,7 @@ func ImportArchive(archivePath, root string) error {
 }
 
 func extractArchive(archivePath, root string) error {
-	file, err := os.Open(archivePath) // #nosec G304 -- archive input path is an explicit user-selected file.
+	file, err := openUserSelectedFile(archivePath)
 	if err != nil {
 		return err
 	}
@@ -300,7 +303,7 @@ func extractArchive(archivePath, root string) error {
 			if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
 				return err
 			}
-			out, err := os.OpenFile(target, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600) // #nosec G304 -- target is derived from cleanArchivePath and rooted in staging.
+			out, err := createNewFile(target, 0o600)
 			if err != nil {
 				return err
 			}
@@ -330,7 +333,7 @@ func copyFile(from, to string) error {
 		return err
 	}
 	defer in.Close()
-	out, err := os.Create(to) // #nosec G304 -- destination path is scoped to temporary export staging.
+	out, err := createNewFile(to, 0o600)
 	if err != nil {
 		return err
 	}
@@ -355,6 +358,16 @@ func readFileNoSymlink(path string) ([]byte, error) {
 	return io.ReadAll(file)
 }
 
+// OpenRootedFileNoSymlink opens a ledger-relative file after rejecting traversal,
+// symlinked parent directories, symlinked files and replacement races.
+func OpenRootedFileNoSymlink(root, name string) (*os.File, error) {
+	path, err := safeRootedFilePath(root, name)
+	if err != nil {
+		return nil, err
+	}
+	return openFileNoSymlink(path)
+}
+
 func openFileNoSymlink(path string) (*os.File, error) {
 	info, err := os.Lstat(path)
 	if err != nil {
@@ -363,7 +376,39 @@ func openFileNoSymlink(path string) (*os.File, error) {
 	if info.Mode()&os.ModeSymlink != 0 {
 		return nil, fmt.Errorf("ledger path %s is a symlink", path)
 	}
-	return os.Open(path) // #nosec G304 -- callers validate or discover paths under the configured ledger root.
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("ledger path %s is not a regular file", path)
+	}
+	file, err := os.Open(path) // #nosec G304 -- callers validate or discover paths under the configured ledger root.
+	if err != nil {
+		return nil, err
+	}
+	openedInfo, err := file.Stat()
+	if err != nil {
+		_ = file.Close()
+		return nil, err
+	}
+	if !openedInfo.Mode().IsRegular() {
+		_ = file.Close()
+		return nil, fmt.Errorf("ledger path %s is not a regular file", path)
+	}
+	if !os.SameFile(info, openedInfo) {
+		_ = file.Close()
+		return nil, fmt.Errorf("ledger path %s changed while opening", path)
+	}
+	return file, nil
+}
+
+func createNewFile(path string, perm os.FileMode) (*os.File, error) {
+	return os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, perm) // #nosec G304 -- callers provide paths already rooted in ledger-owned or staging directories.
+}
+
+func openUserSelectedFile(path string) (*os.File, error) {
+	return os.Open(path) // #nosec G304 -- this path is an explicit user-selected input file.
+}
+
+func createUserSelectedFile(path string) (*os.File, error) {
+	return os.Create(path) // #nosec G304 -- this path is an explicit user-selected output file.
 }
 
 func cleanArchivePath(name string) (string, error) {

@@ -184,7 +184,7 @@ func runIssueCreate(args []string, stdout io.Writer) error {
 	}
 	issueBody := *body
 	if *bodyFile != "" {
-		data, err := os.ReadFile(*bodyFile) // #nosec G304 -- body-file is an explicit user-provided input path.
+		data, err := readExplicitFile(*bodyFile)
 		if err != nil {
 			return err
 		}
@@ -296,7 +296,7 @@ func runIssueEdit(args []string, stdout io.Writer) error {
 		issue.Title = *title
 	}
 	if bodyFileSet {
-		data, err := os.ReadFile(*bodyFile) // #nosec G304 -- body-file is an explicit user-provided input path.
+		data, err := readExplicitFile(*bodyFile)
 		if err != nil {
 			return err
 		}
@@ -359,7 +359,7 @@ func runIssueComment(args []string, stdout io.Writer) error {
 	}
 	commentBody := *body
 	if *bodyFile != "" {
-		data, err := os.ReadFile(*bodyFile) // #nosec G304 -- body-file is an explicit user-provided input path.
+		data, err := readExplicitFile(*bodyFile)
 		if err != nil {
 			return err
 		}

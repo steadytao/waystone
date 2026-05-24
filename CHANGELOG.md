@@ -22,6 +22,27 @@ Nothing yet
 
 Nothing yet
 
+## [v0.2.0] - 2026-05-25
+
+### Added
+
+- Release notes for `v0.2.0`
+- Regression coverage for symlinked credential-store paths, symlinked ledger write targets, symlinked source-inspection object parents and non-regular ledger file reads
+
+### Changed
+
+- `waystone version` now reports `0.2.0`
+- README, roadmap and release checklist documentation now describe the final `v0.2.0` release state rather than the release-candidate checkpoint
+- Repeated explicit file path operations now use named helper boundaries for user-selected input/output files and archive input/output files
+
+### Fixed
+
+- Ledger-owned file writes now use exclusive creation for extracted, copied and private-key files
+- Ledger no-symlink reads now reject non-regular files and replacement races
+- Source inspection now rejects symlinked object parent directories while calculating manifest and object hashes
+- Plaintext credential-store operations now reject symlinked store roots and token files before save, read or delete
+- JSON ledger writes now reject symlinked replacement targets and checked temporary-file directories before replacing files
+
 ## [v0.2.0-rc.1] - 2026-05-25
 
 ### Added

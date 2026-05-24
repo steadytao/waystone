@@ -128,6 +128,29 @@ func TestWriteJSONPreservesExistingFileWhenEncodingFails(t *testing.T) {
 	}
 }
 
+func TestWriteJSONRejectsSymlinkedTarget(t *testing.T) {
+	outside := filepath.Join(t.TempDir(), "outside.json")
+	if err := os.WriteFile(outside, []byte("outside"), 0o600); err != nil {
+		t.Fatalf("WriteFile returned error: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "state.json")
+	if err := os.Symlink(outside, path); err != nil {
+		t.Skipf("cannot create symlink: %v", err)
+	}
+
+	err := writeJSON(path, map[string]string{"version": "new"})
+	if err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("writeJSON error = %v, want symlink rejection", err)
+	}
+	got, readErr := os.ReadFile(outside)
+	if readErr != nil {
+		t.Fatalf("ReadFile returned error: %v", readErr)
+	}
+	if string(got) != "outside" {
+		t.Fatalf("symlink target content = %q, want unchanged", string(got))
+	}
+}
+
 func TestRecordSourceOperationAddsOperationManifestEntry(t *testing.T) {
 	root := t.TempDir()
 	writer := Writer{Root: root}

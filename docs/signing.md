@@ -12,7 +12,7 @@ does not prove that imported forge content was true.
   metadata
 - bind operation records to the actor and command that produced them
 - let exported ledgers carry verifiable archive manifests
-- keep unsigned local use possible during the prototype phase
+- keep unsigned local use possible during the pre-1.0 phase
 
 ## Non-goals
 
@@ -124,7 +124,7 @@ can be considered later.
 
 ## Verification Policy
 
-Unsigned ledgers should remain readable while Waystone is experimental.
+Unsigned ledgers should remain readable while Waystone remains pre-1.0.
 
 Strict verification with signature checks distinguishes:
 - unsigned records

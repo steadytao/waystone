@@ -555,7 +555,10 @@ func writeJSONFile(path string, value any) error {
 	}
 	data = append(data, '\n')
 
-	file, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".tmp-*") // #nosec G304 -- path is constructed inside the selected ledger root.
+	if err := rejectSymlinkReplaceTarget(path); err != nil {
+		return err
+	}
+	file, err := createTempFileForReplace(path)
 	if err != nil {
 		return err
 	}
@@ -582,6 +585,38 @@ func writeJSONFile(path string, value any) error {
 	}
 	cleanup = false
 	return nil
+}
+
+func rejectSymlinkReplaceTarget(path string) error {
+	info, err := os.Lstat(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("ledger path %s is a symlink", path)
+	}
+	if info.IsDir() {
+		return fmt.Errorf("ledger path %s is a directory", path)
+	}
+	return nil
+}
+
+func createTempFileForReplace(path string) (*os.File, error) {
+	dir := filepath.Dir(path)
+	info, err := os.Lstat(dir)
+	if err != nil {
+		return nil, err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return nil, fmt.Errorf("ledger path %s is a symlink", dir)
+	}
+	if !info.IsDir() {
+		return nil, fmt.Errorf("ledger path %s is not a directory", dir)
+	}
+	return os.CreateTemp(dir, "."+filepath.Base(path)+".tmp-*") // #nosec G304 -- path is constructed inside a checked ledger-owned directory.
 }
 
 func sourceScopedPath(source model.Source) string {

@@ -282,7 +282,7 @@ func defaultArchiveLimits() archiveLimits {
 }
 
 func walkArchiveWithLimits(archivePath string, limits archiveLimits, visit func(*tar.Header, []byte) error) error {
-	file, err := os.Open(archivePath) // #nosec G304 -- archive input path is an explicit user-selected file.
+	file, err := openUserSelectedFile(archivePath)
 	if err != nil {
 		return err
 	}

@@ -92,7 +92,7 @@ func (s PlaintextStore) SaveGitHubToken(token GitHubToken) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(s.Root, 0o700); err != nil {
+	if err := s.ensureRoot(); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(token, "", "  ") // #nosec G117 -- --plain-file-store explicitly persists the GitHub token as local plaintext.
@@ -100,10 +100,19 @@ func (s PlaintextStore) SaveGitHubToken(token GitHubToken) error {
 		return err
 	}
 	data = append(data, '\n')
+	if err := rejectPlaintextStorePath(s.path()); err != nil {
+		return err
+	}
 	return os.WriteFile(s.path(), data, 0o600)
 }
 
 func (s PlaintextStore) GitHubToken() (GitHubToken, error) {
+	if err := s.checkRoot(); err != nil {
+		return GitHubToken{}, err
+	}
+	if err := rejectPlaintextStorePath(s.path()); err != nil {
+		return GitHubToken{}, err
+	}
 	data, err := os.ReadFile(s.path())
 	if err != nil {
 		return GitHubToken{}, err
@@ -116,6 +125,12 @@ func (s PlaintextStore) GitHubToken() (GitHubToken, error) {
 }
 
 func (s PlaintextStore) DeleteGitHubToken() error {
+	if err := s.checkRoot(); err != nil {
+		return err
+	}
+	if err := rejectPlaintextStorePath(s.path()); err != nil {
+		return err
+	}
 	err := os.Remove(s.path())
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
@@ -129,6 +144,58 @@ func (s PlaintextStore) Description() string {
 
 func (s PlaintextStore) path() string {
 	return filepath.Join(s.Root, "github.json")
+}
+
+func (s PlaintextStore) ensureRoot() error {
+	info, err := os.Lstat(s.Root)
+	if errors.Is(err, os.ErrNotExist) {
+		if err := os.MkdirAll(s.Root, 0o700); err != nil {
+			return err
+		}
+		info, err = os.Lstat(s.Root)
+	}
+	if err != nil {
+		return err
+	}
+	return checkPlaintextStoreRoot(s.Root, info)
+}
+
+func (s PlaintextStore) checkRoot() error {
+	info, err := os.Lstat(s.Root)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return checkPlaintextStoreRoot(s.Root, info)
+}
+
+func checkPlaintextStoreRoot(path string, info os.FileInfo) error {
+	if info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("plaintext credential store root %s is a symlink", path)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("plaintext credential store root %s is not a directory", path)
+	}
+	return nil
+}
+
+func rejectPlaintextStorePath(path string) error {
+	info, err := os.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("plaintext credential store path %s is a symlink", path)
+	}
+	if info.IsDir() {
+		return fmt.Errorf("plaintext credential store path %s is a directory", path)
+	}
+	return nil
 }
 
 func normalizeToken(token GitHubToken) (GitHubToken, error) {

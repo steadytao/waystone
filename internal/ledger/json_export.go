@@ -76,7 +76,7 @@ func ExportJSON(root, out string, compact bool) error {
 		})
 	}
 
-	file, err := os.Create(out) // #nosec G304 -- JSON export output path is an explicit user-selected destination.
+	file, err := createUserSelectedFile(out)
 	if err != nil {
 		return err
 	}
