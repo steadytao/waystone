@@ -143,6 +143,28 @@ waystone migrate plan --from github:steadytao/waymark --to waystone:steadytao/wa
 
 The plan records how source records would map. It does not create target records.
 
+Use an explicit safe strategy file:
+```sh
+waystone migrate plan \
+  --from github:steadytao/waymark \
+  --to waystone:steadytao/waystone \
+  --strategy-file migration-strategy.json \
+  --out waystone-migration-plan.json
+```
+
+The strategy file is read-only policy. Waystone rejects unsupported strategy versions, unknown fields and unsafe target-write settings.
+
+Generate a structured loss report:
+```sh
+waystone migrate loss-report \
+  --from github:steadytao/waymark \
+  --from gitlab:steadytao/waymark \
+  --to waystone:steadytao/waystone \
+  --json
+```
+
+The loss report is machine-readable evidence of migration surfaces Waystone does not yet represent fully.
+
 ## Export The Ledger
 
 Export the full ledger:

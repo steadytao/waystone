@@ -108,6 +108,14 @@ func TestSpecificHelpShowsCommandOptions(t *testing.T) {
 			},
 		},
 		{
+			name: "help migrate loss-report",
+			args: []string{"help", "migrate", "loss-report"},
+			want: []string{
+				"waystone migrate loss-report [--ledger <dir>] --from <source> [--from <source>] --to <source> --json",
+				"--json",
+			},
+		},
+		{
 			name: "migrate help report",
 			args: []string{"migrate", "help", "report"},
 			want: []string{
@@ -183,7 +191,8 @@ func TestSpecificHelpCoversExactSubcommands(t *testing.T) {
 		{[]string{"ledger", "history"}, []string{"List ledger operation records.", "--json"}},
 		{[]string{"ledger", "show-operation"}, []string{"Show one operation record.", "<operation-id>"}},
 		{[]string{"ledger", "verify"}, []string{"Verify ledger files, hashes and optional signatures.", "--operations"}},
-		{[]string{"migrate", "plan"}, []string{"Write a read-only JSON migration plan.", "--out <file>"}},
+		{[]string{"migrate", "loss-report"}, []string{"Write a structured migration loss report", "--json"}},
+		{[]string{"migrate", "plan"}, []string{"Write a read-only JSON migration plan.", "--strategy-file <file>"}},
 		{[]string{"migrate", "report"}, []string{"Generate a read-only migration report", "--from <source>"}},
 		{[]string{"milestone", "list"}, []string{"List milestones from the ledger.", "--source <source>"}},
 		{[]string{"pr", "list"}, []string{"List pull requests and merge requests from the ledger.", "--source <source>"}},
@@ -1225,6 +1234,56 @@ func TestMigrateReportCommandWritesMultiSourceJSON(t *testing.T) {
 	}
 }
 
+func TestMigrateLossReportCommandWritesStructuredJSON(t *testing.T) {
+	root := writeTestLedger(t)
+	writeTestLedgerSourceWithSystem(t, root, model.Source{System: "gitlab", Owner: "example", Repo: "project"}, sourceFixtureOptions{
+		IssueNumber:       3,
+		PullRequestNumber: 4,
+		LabelName:         "regression",
+		MilestoneTitle:    "v2",
+		AuthorLogin:       "eve",
+	})
+	var stdout, stderr bytes.Buffer
+
+	err := Run(context.Background(), []string{
+		"migrate", "loss-report",
+		"--ledger", root,
+		"--from", "github:example/project",
+		"--from", "gitlab:example/project",
+		"--to", "waystone:steadytao/waystone",
+		"--json",
+	}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("migrate loss-report returned error: %v", err)
+	}
+	var report migrationLossReport
+	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+		t.Fatalf("decoding migration loss report JSON: %v\n%s", err, stdout.String())
+	}
+	if report.Version != "waystone.migration_loss_report.v1" {
+		t.Fatalf("loss report version = %q, want v1", report.Version)
+	}
+	if report.From != "github:example/project, gitlab:example/project" || report.To != "waystone:steadytao/waystone" {
+		t.Fatalf("loss report sources = %q -> %q, want multi-source report", report.From, report.To)
+	}
+	if report.Records.Issues != 2 || len(report.Sources) != 2 {
+		t.Fatalf("loss report records/sources = %#v/%#v, want multi-source counts", report.Records, report.Sources)
+	}
+	for _, category := range []string{"attachments", "review_threads", "ci_history", "workflows", "permissions", "branch_protections", "user_mapping", "release_assets", "visibility"} {
+		if !lossReportHasCategory(report, category) {
+			t.Fatalf("loss report losses = %#v, want category %q", report.Losses, category)
+		}
+	}
+}
+
+func TestMigrateLossReportCommandRequiresJSON(t *testing.T) {
+	root := writeTestLedger(t)
+	err := Run(context.Background(), []string{"migrate", "loss-report", "--ledger", root, "--from", "github:example/project", "--to", "waystone:steadytao/waystone"}, io.Discard, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "usage: waystone migrate loss-report --from <source> --to <source> --json") {
+		t.Fatalf("migrate loss-report error = %v, want JSON usage error", err)
+	}
+}
+
 func TestMigrateReportCommandRequiresAtLeastOneSource(t *testing.T) {
 	root := writeTestLedger(t)
 	err := Run(context.Background(), []string{"migrate", "report", "--ledger", root, "--to", "waystone:steadytao/waystone"}, io.Discard, io.Discard)
@@ -1403,6 +1462,96 @@ func TestMigratePlanCommandRejectsUnknownNumberingStrategy(t *testing.T) {
 	err := Run(context.Background(), []string{"migrate", "plan", "--ledger", root, "--from", "github:example/project", "--to", "waystone:steadytao/waystone", "--numbering-strategy", "chronological-renumber", "--out", out}, io.Discard, io.Discard)
 	if err == nil || !strings.Contains(err.Error(), "only preserve-source-numbering is supported") {
 		t.Fatalf("migrate plan error = %v, want unsupported v0 strategy error", err)
+	}
+}
+
+func TestMigratePlanCommandAcceptsSafeStrategyFile(t *testing.T) {
+	root := writeTestLedger(t)
+	out := filepath.Join(t.TempDir(), "waystone-migration-plan.json")
+	strategyPath := writeMigrationStrategyFixture(t, model.MigrationPlanStrategy{})
+
+	err := Run(context.Background(), []string{
+		"migrate", "plan",
+		"--ledger", root,
+		"--from", "github:example/project",
+		"--to", "waystone:steadytao/waystone",
+		"--strategy-file", strategyPath,
+		"--out", out,
+	}, io.Discard, io.Discard)
+	if err != nil {
+		t.Fatalf("migrate plan returned error: %v", err)
+	}
+	plan := readMigrationPlanFixture(t, out)
+	if plan.Strategy != defaultMigrationPlanStrategy(defaultMigrationNumberingStrategy) {
+		t.Fatalf("plan strategy = %#v, want safe defaults from strategy file", plan.Strategy)
+	}
+}
+
+func TestMigratePlanCommandRejectsUnsafeStrategyFile(t *testing.T) {
+	root := writeTestLedger(t)
+	out := filepath.Join(t.TempDir(), "waystone-migration-plan.json")
+	strategyPath := writeMigrationStrategyFixture(t, model.MigrationPlanStrategy{TargetWrite: "apply"})
+
+	err := Run(context.Background(), []string{
+		"migrate", "plan",
+		"--ledger", root,
+		"--from", "github:example/project",
+		"--to", "waystone:steadytao/waystone",
+		"--strategy-file", strategyPath,
+		"--out", out,
+	}, io.Discard, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "target_write_strategy must be none") {
+		t.Fatalf("migrate plan error = %v, want target write rejection", err)
+	}
+}
+
+func TestMigratePlanCommandRejectsUnknownStrategyFileField(t *testing.T) {
+	root := writeTestLedger(t)
+	out := filepath.Join(t.TempDir(), "waystone-migration-plan.json")
+	strategyPath := filepath.Join(t.TempDir(), "migration-strategy.json")
+	body := `{"version":"waystone.migration_strategy.v1","strategy":{"numbering_strategy":"preserve-source-numbering","author_mapping_strategy":"preserve-source-author","label_mapping_strategy":"preserve-source-labels","milestone_mapping_strategy":"preserve-source-milestones","state_mapping_strategy":"preserve","change_proposal_strategy":"preserve-source-term","timestamp_strategy":"preserve-source-time","collision_strategy":"fail","attachment_strategy":"link-only","visibility_strategy":"preserve-where-supported","comment_strategy":"preserve-order","unsupported_record_strategy":"report","target_write_strategy":"none","unsafe_extra":"x"}}`
+	if err := os.WriteFile(strategyPath, []byte(body), 0o600); err != nil {
+		t.Fatalf("write strategy file: %v", err)
+	}
+
+	err := Run(context.Background(), []string{
+		"migrate", "plan",
+		"--ledger", root,
+		"--from", "github:example/project",
+		"--to", "waystone:steadytao/waystone",
+		"--strategy-file", strategyPath,
+		"--out", out,
+	}, io.Discard, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "unknown field") {
+		t.Fatalf("migrate plan error = %v, want unknown field rejection", err)
+	}
+}
+
+func TestMigratePlanCommandRejectsTrailingStrategyFileJSON(t *testing.T) {
+	root := writeTestLedger(t)
+	out := filepath.Join(t.TempDir(), "waystone-migration-plan.json")
+	strategyPath := writeMigrationStrategyFixture(t, model.MigrationPlanStrategy{})
+	file, err := os.OpenFile(strategyPath, os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatalf("open strategy file: %v", err)
+	}
+	if _, err := file.WriteString("\n{}"); err != nil {
+		t.Fatalf("append trailing strategy JSON: %v", err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatalf("close strategy file: %v", err)
+	}
+
+	err = Run(context.Background(), []string{
+		"migrate", "plan",
+		"--ledger", root,
+		"--from", "github:example/project",
+		"--to", "waystone:steadytao/waystone",
+		"--strategy-file", strategyPath,
+		"--out", out,
+	}, io.Discard, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "exactly one JSON object") {
+		t.Fatalf("migrate plan error = %v, want trailing JSON rejection", err)
 	}
 }
 
@@ -3118,6 +3267,71 @@ func writeMigrationPlanFixture(t *testing.T, plan model.MigrationPlan) string {
 		t.Fatalf("write migration plan: %v", err)
 	}
 	return path
+}
+
+func writeMigrationStrategyFixture(t *testing.T, override model.MigrationPlanStrategy) string {
+	t.Helper()
+	strategy := defaultMigrationPlanStrategy(defaultMigrationNumberingStrategy)
+	if override.Numbering != "" {
+		strategy.Numbering = override.Numbering
+	}
+	if override.AuthorMapping != "" {
+		strategy.AuthorMapping = override.AuthorMapping
+	}
+	if override.LabelMapping != "" {
+		strategy.LabelMapping = override.LabelMapping
+	}
+	if override.MilestoneMapping != "" {
+		strategy.MilestoneMapping = override.MilestoneMapping
+	}
+	if override.StateMapping != "" {
+		strategy.StateMapping = override.StateMapping
+	}
+	if override.ChangeProposal != "" {
+		strategy.ChangeProposal = override.ChangeProposal
+	}
+	if override.Timestamp != "" {
+		strategy.Timestamp = override.Timestamp
+	}
+	if override.Collision != "" {
+		strategy.Collision = override.Collision
+	}
+	if override.Attachment != "" {
+		strategy.Attachment = override.Attachment
+	}
+	if override.Visibility != "" {
+		strategy.Visibility = override.Visibility
+	}
+	if override.Comment != "" {
+		strategy.Comment = override.Comment
+	}
+	if override.UnsupportedRecord != "" {
+		strategy.UnsupportedRecord = override.UnsupportedRecord
+	}
+	if override.TargetWrite != "" {
+		strategy.TargetWrite = override.TargetWrite
+	}
+	path := filepath.Join(t.TempDir(), "migration-strategy.json")
+	data, err := json.MarshalIndent(migrationStrategyFile{
+		Version:  migrationStrategyVersion,
+		Strategy: strategy,
+	}, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal migration strategy: %v", err)
+	}
+	if err := os.WriteFile(path, append(data, '\n'), 0o600); err != nil {
+		t.Fatalf("write migration strategy: %v", err)
+	}
+	return path
+}
+
+func lossReportHasCategory(report migrationLossReport, category string) bool {
+	for _, loss := range report.Losses {
+		if loss.Category == category {
+			return true
+		}
+	}
+	return false
 }
 
 func writeTestLedger(t *testing.T) string {

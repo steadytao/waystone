@@ -30,8 +30,9 @@ Before a release, confirm that Waystone can:
 - run `waystone source list`, `show`, `inspect`, `default` and `refresh`
 - run `waystone migrate report`
 - run `waystone migrate plan`
+- run `waystone migrate loss-report`
 
-For `v0.2.0-alpha.1`, this means the current single-source plan plus cross-source report surface. Later `v0.2` prereleases should raise the bar as multi-source planning, plan inspection, plan verification, loss reporting and conformance fixtures land.
+For `v0.2.0-beta.2`, this means multi-source reports, strategy-file-backed plans, plan inspection, plan verification and structured loss reports. Later `v0.2` prereleases should raise the bar as conformance fixtures and compatibility policy land.
 
 ## Documentation
 

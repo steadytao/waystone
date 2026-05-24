@@ -22,6 +22,18 @@ Nothing yet
 
 Nothing yet
 
+## [v0.2.0-beta.2] - 2026-05-24
+
+### Added
+
+- `waystone migrate plan --strategy-file <file>` for explicit safe read-only migration strategy files
+- `waystone migrate loss-report --json` for structured migration loss reporting
+- Release notes for `v0.2.0-beta.2`
+
+### Changed
+
+- Migration documentation now describes strategy files and structured loss reports as part of the v0.2 bridge-ready contract
+
 ## [v0.2.0-beta.1] - 2026-05-15
 
 ### Added

@@ -169,12 +169,14 @@ Release: `v0.2.0-beta.1`.
 
 ## Phase 7: Strategy File And Structured Loss Report
 
+Status: implemented in `v0.2.0-beta.2`.
+
 Goal:
 ```text
 Make migration policy explicit and report unsupported data in structured form.
 ```
 
-Planned commands:
+Commands:
 ```sh
 waystone migrate plan \
   --from github:owner/repo \
@@ -190,7 +192,7 @@ waystone migrate loss-report \
   --json
 ```
 
-The first strategy file should accept only safe read-only defaults. The loss report should cover attachments, review threads, CI history, workflows, permissions, branch protections, user mapping, release assets and visibility uncertainty where relevant.
+The first strategy file accepts only safe read-only defaults. The loss report covers attachments, review threads, CI history, workflows, permissions, branch protections, user mapping, release assets and visibility uncertainty where relevant.
 
 Release: `v0.2.0-beta.2`.
 
