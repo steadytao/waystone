@@ -237,10 +237,10 @@ jobs:
           assert_contains "$output" "Operations" "Ledger verify output"
 
           output="$("$WAYSTONE_BINARY" version)"
-          assert_contains "$output" "0.0.0-dev" "Version output"
+          assert_contains "$output" "0.2.0" "Version output"
 
           output="$("$WAYSTONE_BINARY" version --json)"
-          assert_contains "$output" '"version": "0.0.0-dev"' "Version JSON output"
+          assert_contains "$output" '"version": "0.2.0"' "Version JSON output"
 
       - name: Check diff formatting
         run: git diff --check
