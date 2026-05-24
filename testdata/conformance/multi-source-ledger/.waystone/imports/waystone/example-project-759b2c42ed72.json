@@ -1,0 +1,34 @@
+{
+  "system": "waystone",
+  "owner": "example",
+  "repo": "project",
+  "url": "waystone:example/project",
+  "objects": [
+    {
+      "object": "project",
+      "id": "waystone:repo:1",
+      "path": "projects/waystone/example/project.json",
+      "sha256": "c022f4fcf4f9e7bedcf63f2aaacbc241852b345c8d86672e3e3fb1bdf0e66753"
+    },
+    {
+      "object": "issue",
+      "number": 1,
+      "id": "waystone:issue:1",
+      "path": "objects/waystone/example/project/issues/000001.json",
+      "sha256": "584e6c45b966a2f03805fe18e90a0859f5b86f0b27a6cd03f7b8c19526acc911"
+    },
+    {
+      "object": "label",
+      "id": "waystone:label:bug",
+      "path": "objects/waystone/example/project/labels/bug-ecb53f367b35.json",
+      "sha256": "761e3f092d124471dfc4ca876423d86dd087362ad3027c028736ea1692146f2b"
+    },
+    {
+      "object": "milestone",
+      "number": 1,
+      "id": "waystone:milestone:v1",
+      "path": "objects/waystone/example/project/milestones/000001.json",
+      "sha256": "67307e07532adceadb84f11faa2591b310dc7376e24de883dc798e91a7c77925"
+    }
+  ]
+}

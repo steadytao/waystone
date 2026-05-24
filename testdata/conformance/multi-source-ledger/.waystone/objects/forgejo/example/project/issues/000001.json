@@ -1,0 +1,26 @@
+{
+  "import_id": "forgejo:example/project",
+  "source": {
+    "system": "forgejo",
+    "owner": "example",
+    "repo": "project",
+    "url": "https://forgejo.example.com/example/project"
+  },
+  "id": "forgejo:issue:1",
+  "source_id": 1,
+  "number": 1,
+  "title": "forgejo issue number one",
+  "body": "Conformance issue demonstrating source-local numbering.",
+  "state": "open",
+  "author": {
+    "login": "alice"
+  },
+  "labels": [
+    "bug"
+  ],
+  "milestone": "v1",
+  "comments": 0,
+  "original_url": "https://forgejo.example.com/example/project/issues/1",
+  "created_at": "2026-01-01T00:00:00Z",
+  "updated_at": "2026-01-01T00:00:00Z"
+}

@@ -64,6 +64,7 @@ The current prototype includes:
 - operation records for ledger-changing and verification commands
 - object hashes and strict ledger verification
 - migration reports, saved migration plans, strategy files and structured loss reports
+- v0.2 compatibility policy and conformance fixtures
 - local Ed25519 signing for new operation records and source manifests
 - local trust policy for Waystone signing identities
 - ledger archive export, manifest signing, inspection and import
@@ -243,6 +244,8 @@ waystone migrate verify <plan>
 
 Most browsing commands accept `--source <system>:<owner>/<repo>`, for example `github:owner/repo`. If no source is supplied, Waystone uses the default source in `ledger.json` when one is set.
 
+`source refresh` currently refreshes GitHub sources only. In mixed ledgers, use `--source github:owner/repo` or `--sources ...` for supported sources explicitly. GitLab, Forgejo, Gitea and local Waystone sources are retained as read-only or local evidence in v0.2.
+
 ## Ledger Model
 
 Waystone stores data in a local `.waystone/` directory.
@@ -279,7 +282,7 @@ Sources are repo-specific namespaces. Remote imports currently use `github:owner
 
 `waystone migrate inspect` summarises a saved plan for review. `waystone migrate verify` validates the plan artefact independently from ledger verification, including supported version, strategy values, required fields, source namespaces, duplicate records, disabled target writes and deterministic target keys.
 
-Waystone treats original source identity as evidence and target identity as a projection. Matching issue numbers, label names, milestone titles or author logins across sources are reported as ambiguity; they are not silently merged. See [docs/migration-identity.md](docs/migration-identity.md).
+Waystone treats original source identity as evidence and target identity as a projection. Matching issue numbers, label names, milestone titles or author logins across sources are reported as ambiguity; they are not silently merged. See [docs/migration-identity.md](docs/migration-identity.md) and [docs/compatibility.md](docs/compatibility.md).
 
 See [docs/ledger-format.md](docs/ledger-format.md) and [docs/operations.md](docs/operations.md).
 
@@ -362,7 +365,7 @@ Use `--concurrency` to control bounded concurrent GitLab note and detail request
 
 The default ledger export is a compressed archive intended for portable preservation and transfer.
 
-Safe import verifies the archive manifest and the extracted Waystone ledger before replacing local state. `--unsafe` exists only as an explicit escape hatch for controlled development or recovery work and should not be used for untrusted archives.
+Safe import verifies archive and ledger integrity, then confirms `github:` source repository reachability through authenticated GitHub API access. It does not prove imported objects still match upstream forge state, and v0.2 does not remotely confirm `gitlab:`, `forgejo:` or `gitea:` sources. `--unsafe` exists only as an explicit escape hatch for controlled development or recovery work and should not be used for untrusted archives.
 
 Importing Waystone data must never execute anything.
 

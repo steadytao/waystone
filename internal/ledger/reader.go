@@ -150,7 +150,7 @@ func (r Reader) Issues() ([]model.Issue, error) {
 }
 
 func (r Reader) SourceIssues(source model.Source) ([]model.Issue, error) {
-	issues, err := readDirJSON[model.Issue](filepath.Join(r.Root, sourceScopedPath(source), "issues"))
+	issues, err := readDirJSONRooted[model.Issue](r.Root, filepath.Join(sourceScopedPath(source), "issues"))
 	if err != nil {
 		return nil, err
 	}
@@ -193,25 +193,27 @@ func (r Reader) Comments(issueNumber int) ([]model.Comment, error) {
 	if err != nil {
 		return nil, err
 	}
-	var filtered []model.Comment
-	for _, comment := range comments {
-		if comment.IssueNumber == issueNumber {
-			filtered = append(filtered, comment)
-		}
-	}
-	return sortComments(filtered), nil
+	return filterIssueComments(comments, issueNumber), nil
 }
 
 func (r Reader) SourceComments(source model.Source, issueNumber int) ([]model.Comment, error) {
-	comments, err := readDirJSON[model.Comment](filepath.Join(r.Root, sourceScopedPath(source), "comments"))
+	comments, err := readDirJSONRooted[model.Comment](r.Root, filepath.Join(sourceScopedPath(source), "comments"))
 	if err != nil {
 		return nil, err
 	}
-	return filterComments(comments, issueNumber), nil
+	return filterIssueComments(comments, issueNumber), nil
+}
+
+func (r Reader) SourcePullRequestComments(source model.Source, pullRequestNumber int) ([]model.Comment, error) {
+	comments, err := readDirJSONRooted[model.Comment](r.Root, filepath.Join(sourceScopedPath(source), "comments"))
+	if err != nil {
+		return nil, err
+	}
+	return filterPullRequestComments(comments, pullRequestNumber), nil
 }
 
 func (r Reader) SourceIssueEvents(source model.Source, issueNumber int) ([]model.IssueEvent, error) {
-	events, err := readDirJSON[model.IssueEvent](filepath.Join(r.Root, sourceScopedPath(source), "events"))
+	events, err := readDirJSONRooted[model.IssueEvent](r.Root, filepath.Join(sourceScopedPath(source), "events"))
 	if err != nil {
 		return nil, err
 	}
@@ -230,7 +232,7 @@ func (r Reader) PullRequests() ([]model.PullRequest, error) {
 }
 
 func (r Reader) SourcePullRequests(source model.Source) ([]model.PullRequest, error) {
-	prs, err := readDirJSON[model.PullRequest](filepath.Join(r.Root, sourceScopedPath(source), "pull_requests"))
+	prs, err := readDirJSONRooted[model.PullRequest](r.Root, filepath.Join(sourceScopedPath(source), "pull_requests"))
 	if err != nil {
 		return nil, err
 	}
@@ -283,7 +285,7 @@ func (r Reader) ReviewComments(pullRequestNumber int) ([]model.ReviewComment, er
 }
 
 func (r Reader) SourceReviewComments(source model.Source, pullRequestNumber int) ([]model.ReviewComment, error) {
-	comments, err := readDirJSON[model.ReviewComment](filepath.Join(r.Root, sourceScopedPath(source), "reviews"))
+	comments, err := readDirJSONRooted[model.ReviewComment](r.Root, filepath.Join(sourceScopedPath(source), "reviews"))
 	if err != nil {
 		return nil, err
 	}
@@ -305,7 +307,7 @@ func (r Reader) Labels() ([]model.Label, error) {
 }
 
 func (r Reader) SourceLabels(source model.Source) ([]model.Label, error) {
-	labels, err := readDirJSON[model.Label](filepath.Join(r.Root, sourceScopedPath(source), "labels"))
+	labels, err := readDirJSONRooted[model.Label](r.Root, filepath.Join(sourceScopedPath(source), "labels"))
 	if err != nil {
 		return nil, err
 	}
@@ -385,7 +387,7 @@ func (r Reader) Milestones() ([]model.Milestone, error) {
 }
 
 func (r Reader) SourceMilestones(source model.Source) ([]model.Milestone, error) {
-	milestones, err := readDirJSON[model.Milestone](filepath.Join(r.Root, sourceScopedPath(source), "milestones"))
+	milestones, err := readDirJSONRooted[model.Milestone](r.Root, filepath.Join(sourceScopedPath(source), "milestones"))
 	if err != nil {
 		return nil, err
 	}
@@ -396,7 +398,7 @@ func (r Reader) SourceMilestones(source model.Source) ([]model.Milestone, error)
 }
 
 func (r Reader) SourceReleases(source model.Source) ([]model.Release, error) {
-	releases, err := readDirJSON[model.Release](filepath.Join(r.Root, sourceScopedPath(source), "releases"))
+	releases, err := readDirJSONRooted[model.Release](r.Root, filepath.Join(sourceScopedPath(source), "releases"))
 	if err != nil {
 		return nil, err
 	}
@@ -427,7 +429,7 @@ func (r Reader) Audits() ([]model.GitHubAudit, error) {
 }
 
 func (r Reader) SourceAudits(source model.Source) ([]model.GitHubAudit, error) {
-	audits, err := readDirJSON[model.GitHubAudit](filepath.Join(r.Root, sourceScopedPath(source), "audits"))
+	audits, err := readDirJSONRooted[model.GitHubAudit](r.Root, filepath.Join(sourceScopedPath(source), "audits"))
 	if err != nil {
 		return nil, err
 	}
@@ -449,16 +451,29 @@ func (r Reader) Audit(id string) (model.GitHubAudit, error) {
 }
 
 func readDirJSON[T any](dir string) ([]T, error) {
-	entries, err := os.ReadDir(dir)
+	info, err := os.Lstat(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
 		return nil, err
 	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return nil, fmt.Errorf("ledger path %s is a symlink", dir)
+	}
+	if !info.IsDir() {
+		return nil, fmt.Errorf("ledger path %s is not a directory", dir)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
 
 	var values []T
 	for _, entry := range entries {
+		if err := rejectSymlinkEntry(filepath.Join(dir, entry.Name()), entry); err != nil {
+			return nil, err
+		}
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
 			continue
 		}
@@ -471,10 +486,21 @@ func readDirJSON[T any](dir string) ([]T, error) {
 	return values, nil
 }
 
+func readDirJSONRooted[T any](root, relative string) ([]T, error) {
+	dir, err := safeRootedDirPath(root, relative)
+	if err != nil {
+		return nil, err
+	}
+	return readDirJSON[T](dir)
+}
+
 func readTreeJSON[T any](root string) ([]T, error) {
 	var values []T
 	if err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
+			return err
+		}
+		if err := rejectSymlinkEntry(path, entry); err != nil {
 			return err
 		}
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
@@ -505,6 +531,9 @@ func readObjectTreeJSON[T any](root, objectDir string) ([]T, error) {
 		if err != nil {
 			return err
 		}
+		if err := rejectSymlinkEntry(path, entry); err != nil {
+			return err
+		}
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" || filepath.Base(filepath.Dir(path)) != objectDir {
 			return nil
 		}
@@ -520,14 +549,26 @@ func readObjectTreeJSON[T any](root, objectDir string) ([]T, error) {
 	return values, nil
 }
 
-func filterComments(comments []model.Comment, issueNumber int) []model.Comment {
+func filterIssueComments(comments []model.Comment, issueNumber int) []model.Comment {
+	return filterComments(comments, issueNumber, "issue")
+}
+
+func filterPullRequestComments(comments []model.Comment, pullRequestNumber int) []model.Comment {
+	return filterComments(comments, pullRequestNumber, "pull_request")
+}
+
+func filterComments(comments []model.Comment, issueNumber int, parentObject string) []model.Comment {
 	var filtered []model.Comment
 	for _, comment := range comments {
-		if comment.IssueNumber == issueNumber {
+		if comment.IssueNumber == issueNumber && commentParentMatches(comment.ParentObject, parentObject) {
 			filtered = append(filtered, comment)
 		}
 	}
 	return sortComments(filtered)
+}
+
+func commentParentMatches(got, want string) bool {
+	return got == "" || got == want
 }
 
 func sortComments(comments []model.Comment) []model.Comment {
@@ -627,7 +668,11 @@ func compareSource(a, b model.Source) int {
 }
 
 func (r Reader) readJSON(relative string, out any) error {
-	return readJSONFile(filepath.Join(r.Root, relative), out)
+	path, err := safeRootedFilePath(r.Root, relative)
+	if err != nil {
+		return err
+	}
+	return readJSONFile(path, out)
 }
 
 func (r Reader) countObjectFiles(objectDir string) (int, error) {
@@ -639,7 +684,7 @@ func (r Reader) countObjectFiles(objectDir string) (int, error) {
 }
 
 func readJSONFile(path string, out any) error {
-	data, err := os.ReadFile(path) // #nosec G304 -- readers only access files under the configured ledger root.
+	data, err := readFileNoSymlink(path)
 	if err != nil {
 		return err
 	}

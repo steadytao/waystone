@@ -32,7 +32,7 @@ Before a release, confirm that Waystone can:
 - run `waystone migrate plan`
 - run `waystone migrate loss-report`
 
-For `v0.2.0-beta.2`, this means multi-source reports, strategy-file-backed plans, plan inspection, plan verification and structured loss reports. Later `v0.2` prereleases should raise the bar as conformance fixtures and compatibility policy land.
+For `v0.2.0-rc.1`, this means multi-source reports, strategy-file-backed plans, plan inspection, plan verification, structured loss reports, conformance fixtures and compatibility policy. Later `v0.2` prereleases should be limited to release blockers, documentation fixes and compatibility corrections.
 
 ## Documentation
 

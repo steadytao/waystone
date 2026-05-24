@@ -86,6 +86,43 @@ func TestWriteAndReadOperation(t *testing.T) {
 	}
 }
 
+func TestOperationsSortDeterministicallyForEqualTimestamps(t *testing.T) {
+	root := t.TempDir()
+	startedAt := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	operations := []model.Operation{
+		{
+			ID:         "operation-b",
+			Command:    "second",
+			StartedAt:  startedAt,
+			FinishedAt: startedAt,
+			Output:     model.OperationOutput{Ledger: root},
+		},
+		{
+			ID:         "operation-a",
+			Command:    "first",
+			StartedAt:  startedAt,
+			FinishedAt: startedAt,
+			Output:     model.OperationOutput{Ledger: root},
+		},
+	}
+	for _, operation := range operations {
+		if err := (Writer{Root: root}).WriteOperation(operation); err != nil {
+			t.Fatalf("WriteOperation(%s) returned error: %v", operation.ID, err)
+		}
+	}
+
+	got, err := (Reader{Root: root}).Operations()
+	if err != nil {
+		t.Fatalf("Operations returned error: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("operations = %d, want 2", len(got))
+	}
+	if got[0].ID != "operation-a" || got[1].ID != "operation-b" {
+		t.Fatalf("operation order = %q, %q; want operation-a, operation-b", got[0].ID, got[1].ID)
+	}
+}
+
 func TestLocalActorOmitsMachineIdentityByDefault(t *testing.T) {
 	actor := LocalActor("Tao", "tao@example.com", false)
 	if actor.Source != "local" {
@@ -128,6 +165,23 @@ func TestVerifyLedger(t *testing.T) {
 		if change.Type != "verified" {
 			t.Fatalf("change type = %q, want verified", change.Type)
 		}
+	}
+}
+
+func TestVerifyRejectsSymlinkedJSON(t *testing.T) {
+	root := writeTestLedger(t)
+	outside := filepath.Join(t.TempDir(), "outside.json")
+	if err := os.WriteFile(outside, []byte("{}\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile returned error: %v", err)
+	}
+	link := filepath.Join(root, "objects", "github", "example", "project", "issues", "symlink.json")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Skipf("cannot create symlink: %v", err)
+	}
+
+	_, err := (Reader{Root: root}).Verify()
+	if err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("Verify error = %v, want symlink rejection", err)
 	}
 }
 
@@ -189,6 +243,65 @@ func TestVerifyOperationsDetectsRecordedFileTampering(t *testing.T) {
 	_, err = (Reader{Root: root}).VerifyOperations()
 	if err == nil || !strings.Contains(err.Error(), "hash mismatch") {
 		t.Fatalf("VerifyOperations error = %v, want hash mismatch", err)
+	}
+}
+
+func TestVerifyOperationsChecksSourceManifestObjectRefsWithoutOperations(t *testing.T) {
+	root := writeTestLedger(t)
+	if err := os.WriteFile(filepath.Join(root, "objects", "github", "example", "project", "issues", "000001.json"), []byte("{}\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile returned error: %v", err)
+	}
+
+	_, err := (Reader{Root: root}).VerifyOperations()
+	if err == nil || !strings.Contains(err.Error(), "hash mismatch") {
+		t.Fatalf("VerifyOperations error = %v, want source object hash mismatch", err)
+	}
+}
+
+func TestVerifyOperationsRejectsMissingSourceManifestObject(t *testing.T) {
+	root := writeTestLedger(t)
+	if err := os.Remove(filepath.Join(root, "objects", "github", "example", "project", "issues", "000001.json")); err != nil {
+		t.Fatalf("Remove returned error: %v", err)
+	}
+
+	_, err := (Reader{Root: root}).VerifyOperations()
+	if err == nil {
+		t.Fatal("VerifyOperations returned nil error for missing source object")
+	}
+}
+
+func TestVerifyOperationsRejectsUnsafeSourceManifestObjectPath(t *testing.T) {
+	tests := []string{
+		"../outside.json",
+		"objects/github/example/project/issues/../issues/000001.json",
+	}
+	for _, path := range tests {
+		t.Run(path, func(t *testing.T) {
+			root := writeTestLedger(t)
+			source, err := (Reader{Root: root}).Source(model.Source{System: "github", Owner: "example", Repo: "project"})
+			if err != nil {
+				t.Fatalf("Source returned error: %v", err)
+			}
+			found := false
+			for i := range source.Objects {
+				if source.Objects[i].Object == "issue" {
+					source.Objects[i].Path = path
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Fatal("fixture source has no issue object ref")
+			}
+			if err := writeJSON(filepath.Join(root, sourceManifestPath(source)), source); err != nil {
+				t.Fatalf("writeJSON returned error: %v", err)
+			}
+
+			_, err = (Reader{Root: root}).VerifyOperations()
+			if err == nil || !strings.Contains(err.Error(), "unsafe path") {
+				t.Fatalf("VerifyOperations error = %v, want unsafe path error", err)
+			}
+		})
 	}
 }
 

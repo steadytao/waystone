@@ -120,6 +120,7 @@ Strict verification checks:
 - operation hashes match recorded content
 - operation records link to the previous operation
 - recorded object hashes match local files
+- source manifest object references stay inside the ledger and do not resolve through symlinks
 
 Strict verification detects local tampering and accidental edits. It does not prove that the original remote forge content was correct.
 

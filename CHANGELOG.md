@@ -22,6 +22,26 @@ Nothing yet
 
 Nothing yet
 
+## [v0.2.0-rc.1] - 2026-05-25
+
+### Added
+
+- `docs/compatibility.md` defining the v0.2 compatibility policy and conformance fixture scope
+- Conformance fixtures for a single GitHub ledger, multi-source migration ledger, local labelled Waystone issues, migration plans, strategy files and structured loss reports
+- Regression coverage for the v0.2 conformance fixtures and compatibility document
+- Defensive archive entry-count and aggregate-size limits
+
+### Fixed
+
+- Trusted operation and source signatures now require the signature public key to match the stored trusted identity public key
+- Migration plan verification now rejects trailing JSON and invalid source namespaces
+
+### Changed
+
+- Roadmap, release checklist and README documentation now describe `v0.2.0-rc.1` as the conformance and compatibility checkpoint
+- Ledger JSON writes now use same-directory temporary files before replacing existing files
+- Operation listing now sorts deterministically when operation timestamps are equal
+
 ## [v0.2.0-beta.2] - 2026-05-24
 
 ### Added

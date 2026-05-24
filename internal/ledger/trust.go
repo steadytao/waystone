@@ -7,14 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/steadytao/waystone/internal/model"
 )
 
 func (r Reader) Identities() ([]model.Identity, error) {
-	identities, err := readDirJSON[model.Identity](filepath.Join(r.Root, "identities"))
+	identities, err := readDirJSONRooted[model.Identity](r.Root, "identities")
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, nil
@@ -39,7 +38,7 @@ func (r Reader) Identity(id string) (model.Identity, error) {
 
 func (r Reader) TrustPolicy() (model.TrustPolicy, error) {
 	var policy model.TrustPolicy
-	if err := readJSONFile(trustPolicyPath(r.Root), &policy); err != nil {
+	if err := r.readJSON("trust.json", &policy); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return model.TrustPolicy{Version: "waystone.trust.v1"}, nil
 		}
@@ -65,11 +64,11 @@ func (w Writer) TrustIdentity(id string) error {
 	for i, identity := range policy.TrustedIdentities {
 		if identity.ID == id {
 			policy.TrustedIdentities[i].TrustedAt = now
-			return writeJSON(trustPolicyPath(w.Root), policy)
+			return writeJSONUnderRoot(w.Root, "trust.json", policy)
 		}
 	}
 	policy.TrustedIdentities = append(policy.TrustedIdentities, model.TrustedIdentity{ID: id, TrustedAt: now})
-	return writeJSON(trustPolicyPath(w.Root), policy)
+	return writeJSONUnderRoot(w.Root, "trust.json", policy)
 }
 
 func (w Writer) UntrustIdentity(id string) error {
@@ -87,9 +86,5 @@ func (w Writer) UntrustIdentity(id string) error {
 		}
 	}
 	policy.TrustedIdentities = trusted
-	return writeJSON(trustPolicyPath(w.Root), policy)
-}
-
-func trustPolicyPath(root string) string {
-	return filepath.Join(root, "trust.json")
+	return writeJSONUnderRoot(w.Root, "trust.json", policy)
 }

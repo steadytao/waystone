@@ -1,0 +1,16 @@
+{
+  "import_id": "gitlab:example/project",
+  "source": {
+    "system": "gitlab",
+    "owner": "example",
+    "repo": "project",
+    "url": "https://gitlab.example.com/example/project"
+  },
+  "id": "gitlab:label:bug",
+  "source_id": 10,
+  "name": "bug",
+  "color": "d73a4a",
+  "description": "Something broken",
+  "created_at": "2026-01-01T00:00:00Z",
+  "updated_at": "2026-01-01T00:00:00Z"
+}

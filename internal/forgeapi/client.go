@@ -138,7 +138,7 @@ func (c *Client) issues(ctx context.Context, owner, repo string, repositoryID in
 
 func (c *Client) issueComments(ctx context.Context, owner, repo string, repositoryID int64, issues []model.Issue) ([]model.Comment, error) {
 	results, err := concurrentMap(ctx, c.concurrency, issues, func(ctx context.Context, issue model.Issue) ([]model.Comment, error) {
-		return c.comments(ctx, owner, repo, repositoryID, issue.Number, "issue_comment")
+		return c.comments(ctx, owner, repo, repositoryID, issue.Number, "issue_comment", "issue")
 	})
 	if err != nil {
 		return nil, err
@@ -189,7 +189,7 @@ func (c *Client) pullRequests(ctx context.Context, owner, repo string, repositor
 
 func (c *Client) pullRequestComments(ctx context.Context, owner, repo string, repositoryID int64, pullRequests []model.PullRequest) ([]model.Comment, error) {
 	results, err := concurrentMap(ctx, c.concurrency, pullRequests, func(ctx context.Context, pr model.PullRequest) ([]model.Comment, error) {
-		return c.comments(ctx, owner, repo, repositoryID, pr.Number, "pull_request_comment")
+		return c.comments(ctx, owner, repo, repositoryID, pr.Number, "pull_request_comment", "pull_request")
 	})
 	if err != nil {
 		return nil, err
@@ -201,7 +201,7 @@ func (c *Client) pullRequestComments(ctx context.Context, owner, repo string, re
 	return comments, nil
 }
 
-func (c *Client) comments(ctx context.Context, owner, repo string, repositoryID int64, number int, kind string) ([]model.Comment, error) {
+func (c *Client) comments(ctx context.Context, owner, repo string, repositoryID int64, number int, kind, parentObject string) ([]model.Comment, error) {
 	items, err := getAll[fjComment](ctx, c, fmt.Sprintf("/repos/%s/%s/issues/%d/comments", owner, repo, number), url.Values{"limit": {"50"}})
 	if err != nil {
 		return nil, err
@@ -209,14 +209,15 @@ func (c *Client) comments(ctx context.Context, owner, repo string, repositoryID 
 	comments := make([]model.Comment, 0, len(items))
 	for _, item := range items {
 		comments = append(comments, model.Comment{
-			ID:          stableID(c.system, kind, strconv.FormatInt(repositoryID, 10), strconv.Itoa(number), strconv.FormatInt(item.ID, 10)),
-			SourceID:    item.ID,
-			IssueNumber: number,
-			Author:      author(item.User),
-			Body:        item.Body,
-			OriginalURL: item.HTMLURL,
-			CreatedAt:   item.CreatedAt,
-			UpdatedAt:   item.UpdatedAt,
+			ID:           stableID(c.system, kind, strconv.FormatInt(repositoryID, 10), strconv.Itoa(number), strconv.FormatInt(item.ID, 10)),
+			SourceID:     item.ID,
+			IssueNumber:  number,
+			ParentObject: parentObject,
+			Author:       author(item.User),
+			Body:         item.Body,
+			OriginalURL:  item.HTMLURL,
+			CreatedAt:    item.CreatedAt,
+			UpdatedAt:    item.UpdatedAt,
 		})
 	}
 	return comments, nil

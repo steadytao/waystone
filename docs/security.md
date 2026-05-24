@@ -12,7 +12,9 @@ Waystone is experimental and should not be treated as a security boundary.
 
 ## Safe Import
 
-Safe archive import verifies the archive manifest, verifies the archive as a Waystone ledger and confirms GitHub source repositories through authenticated GitHub API access.
+Safe archive import verifies archive paths, archive hashes, ledger JSON shape, operation hashes, source-manifest object hashes and supported signatures. For `github:` sources, it also confirms that the source repository is reachable through authenticated GitHub API access.
+
+Safe import does not prove that imported object contents still match the upstream forge. Remote confirmation for `gitlab:`, `forgejo:` and `gitea:` sources is not implemented in v0.2.
 
 `--unsafe` skips remote source confirmation. It does not permit path traversal or unsupported archive entries.
 
@@ -40,7 +42,7 @@ Source manifest signatures prove that a source manifest indexed a specific set o
 
 Archive manifest signatures prove that an exported archive manifest was produced by the private key corresponding to the recorded public identity. They cover the logical archive manifest, not the compressed bytes.
 
-Valid signatures are reported as trusted or untrusted according to local trust policy. Trust policy is ledger-local and uses Waystone identity IDs.
+Valid operation and source manifest signatures are reported as trusted only when the signature identity ID is trusted and the signature public key matches the stored local identity. Trust policy is ledger-local and uses Waystone identity IDs.
 
 Unsigned records are reported because early ledgers may predate signing. Invalid signatures fail verification.
 
@@ -48,4 +50,8 @@ Unsigned records are reported because early ledgers may predate signing. Invalid
 
 Waystone is currently developed under `github.com/steadytao/waystone`.
 
-For now, report security issues privately to Tao if you know the appropriate contact channel. If not, open a minimal public issue that requests private contact without disclosing exploit details.
+Do not report security vulnerabilities in public issues. Use the repository's private GitHub Security Advisory reporting path once it is available:
+
+```text
+https://github.com/steadytao/waystone/security/advisories/new
+```

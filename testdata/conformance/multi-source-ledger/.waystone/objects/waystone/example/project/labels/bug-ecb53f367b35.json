@@ -1,0 +1,16 @@
+{
+  "import_id": "waystone:example/project",
+  "source": {
+    "system": "waystone",
+    "owner": "example",
+    "repo": "project",
+    "url": "waystone:example/project"
+  },
+  "id": "waystone:label:bug",
+  "source_id": 10,
+  "name": "bug",
+  "color": "d73a4a",
+  "description": "Something broken",
+  "created_at": "2026-01-01T00:00:00Z",
+  "updated_at": "2026-01-01T00:00:00Z"
+}

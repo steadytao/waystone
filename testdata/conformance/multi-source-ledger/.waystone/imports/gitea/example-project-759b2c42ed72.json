@@ -1,0 +1,34 @@
+{
+  "system": "gitea",
+  "owner": "example",
+  "repo": "project",
+  "url": "https://gitea.example.com/example/project",
+  "objects": [
+    {
+      "object": "project",
+      "id": "gitea:repo:1",
+      "path": "projects/gitea/example/project.json",
+      "sha256": "69041336260bc9ede428105f20370dbb08bbbdc808ea5bfbd89474123786af0a"
+    },
+    {
+      "object": "issue",
+      "number": 1,
+      "id": "gitea:issue:1",
+      "path": "objects/gitea/example/project/issues/000001.json",
+      "sha256": "8f2961bfa792066a7325d5d18b8144def7a8d8c0f2e4c30d3d674dbcd00682a6"
+    },
+    {
+      "object": "label",
+      "id": "gitea:label:bug",
+      "path": "objects/gitea/example/project/labels/bug-ecb53f367b35.json",
+      "sha256": "c518b02cba49f3ca3f73471d3927c19b24ae15abce87d2c04a50a9d36361b91d"
+    },
+    {
+      "object": "milestone",
+      "number": 1,
+      "id": "gitea:milestone:v1",
+      "path": "objects/gitea/example/project/milestones/000001.json",
+      "sha256": "3dad03dfecae551606dac264070df9a9947afb5d9f88ad36aa9182373884318e"
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "strategy": {
+    "attachment_strategy": "link-only",
+    "author_mapping_strategy": "preserve-source-author",
+    "change_proposal_strategy": "preserve-source-term",
+    "collision_strategy": "fail",
+    "comment_strategy": "preserve-order",
+    "label_mapping_strategy": "preserve-source-labels",
+    "milestone_mapping_strategy": "preserve-source-milestones",
+    "numbering_strategy": "preserve-source-numbering",
+    "state_mapping_strategy": "preserve",
+    "target_write_strategy": "none",
+    "timestamp_strategy": "preserve-source-time",
+    "unsupported_record_strategy": "report",
+    "visibility_strategy": "preserve-where-supported"
+  },
+  "version": "waystone.migration_strategy.v1"
+}

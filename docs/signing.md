@@ -77,7 +77,9 @@ waystone ledger verify --strict --signatures
 
 Unsigned operation records and source manifests are reported, not rejected.
 Valid signatures are reported as trusted or untrusted according to local trust
-policy. Invalid signatures are integrity failures.
+policy. For operation and source-manifest signatures, a trusted result requires
+the signature identity ID and public key to match the stored local identity.
+Invalid signatures are integrity failures.
 
 Operation signing proves that the operation record was produced by the local
 private key corresponding to the recorded public identity. It does not prove
@@ -136,9 +138,10 @@ Strict verification with signature checks distinguishes:
 Invalid signatures and hash mismatches are integrity failures. Unknown keys are
 trust-policy findings.
 
-The first trust implementation is local and explicit. It trusts identities by
-Waystone identity ID in `trust.json`. It does not bind keys to GitHub accounts,
-SSH keys, PGP identities or any external identity provider.
+The first trust implementation is local and explicit. It trusts stored Waystone
+identities by identity ID in `trust.json`, and verification requires the
+signature public key to match that stored identity. It does not bind keys to
+GitHub accounts, SSH keys, PGP identities or any external identity provider.
 
 ## Privacy
 

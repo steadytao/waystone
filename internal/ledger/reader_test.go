@@ -4,8 +4,10 @@
 package ledger
 
 import (
+	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -46,6 +48,22 @@ func TestReaderSource(t *testing.T) {
 	}
 	if len(source.Objects) == 0 {
 		t.Fatal("source object manifest was empty")
+	}
+}
+
+func TestSourceIssuesRejectsSymlinkedSourceParent(t *testing.T) {
+	root := writeTestLedger(t)
+	link := filepath.Join(root, "objects", "github", "example", "project")
+	if err := os.RemoveAll(link); err != nil {
+		t.Fatalf("RemoveAll returned error: %v", err)
+	}
+	if err := os.Symlink(t.TempDir(), link); err != nil {
+		t.Skipf("cannot create symlink: %v", err)
+	}
+
+	_, err := (Reader{Root: root}).SourceIssues(model.Source{System: "github", Owner: "example", Repo: "project"})
+	if err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("SourceIssues error = %v, want symlink rejection", err)
 	}
 }
 

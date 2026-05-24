@@ -179,7 +179,7 @@ func runPullRequestTimeline(args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	conversationComments, err := reader.SourceComments(pr.Source, number)
+	conversationComments, err := reader.SourcePullRequestComments(pr.Source, number)
 	if err != nil {
 		return err
 	}

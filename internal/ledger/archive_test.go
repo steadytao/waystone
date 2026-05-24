@@ -136,10 +136,40 @@ func TestImportArchiveRejectsManifestHashMismatch(t *testing.T) {
 	}
 }
 
+func TestVerifyArchiveManifestRejectsDuplicateFileRefs(t *testing.T) {
+	archive := filepath.Join(t.TempDir(), "duplicate-ref.tar.zst")
+	manifestData, err := canonicalJSON(model.ArchiveManifest{
+		Version:   "waystone.archive.v1",
+		Format:    "tar+zstd",
+		CreatedAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		Files: []model.ArchiveFileRef{
+			{Path: "ledger.json", SHA256: strings.Repeat("0", 64), Size: 3},
+			{Path: "ledger.json", SHA256: strings.Repeat("0", 64), Size: 3},
+		},
+	})
+	if err != nil {
+		t.Fatalf("canonicalJSON returned error: %v", err)
+	}
+	if err := writeTestArchiveEntries(archive, map[string][]byte{
+		"ledger.json":       []byte("{}\n"),
+		archiveManifestName: manifestData,
+	}); err != nil {
+		t.Fatalf("writeTestArchiveEntries returned error: %v", err)
+	}
+
+	_, err = VerifyArchiveManifest(archive)
+	if err == nil || !strings.Contains(err.Error(), "duplicate path") {
+		t.Fatalf("VerifyArchiveManifest error = %v, want duplicate path error", err)
+	}
+}
+
 func TestImportArchiveRejectsUnsafePaths(t *testing.T) {
 	tests := []string{
 		"..",
 		"../evil.json",
+		"./evil.json",
+		"safe//evil.json",
+		"safe/../evil.json",
 		"/evil.json",
 		`..\evil.json`,
 		`C:/evil.json`,
@@ -157,6 +187,73 @@ func TestImportArchiveRejectsUnsafePaths(t *testing.T) {
 				t.Fatal("ImportArchive returned nil error for unsafe path")
 			}
 		})
+	}
+}
+
+func TestExportArchiveRejectsSymlinkedLedgerFile(t *testing.T) {
+	root := writeTestLedger(t)
+	outside := filepath.Join(t.TempDir(), "outside.json")
+	if err := os.WriteFile(outside, []byte(`{"outside":true}`+"\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile returned error: %v", err)
+	}
+	link := filepath.Join(root, "objects", "github", "example", "project", "issues", "symlink.json")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Skipf("cannot create symlink: %v", err)
+	}
+
+	err := ExportArchive(root, filepath.Join(t.TempDir(), "ledger"))
+	if err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("ExportArchive error = %v, want symlink rejection", err)
+	}
+}
+
+func TestExportSourceArchiveRejectsSymlinkedObjectParent(t *testing.T) {
+	root := writeTestLedger(t)
+	link := filepath.Join(root, "objects", "github", "example", "project", "issues")
+	if err := os.RemoveAll(link); err != nil {
+		t.Fatalf("RemoveAll returned error: %v", err)
+	}
+	if err := os.Symlink(t.TempDir(), link); err != nil {
+		t.Skipf("cannot create symlink: %v", err)
+	}
+
+	err := ExportSourceArchive(root, "github:example/project", filepath.Join(t.TempDir(), "source-ledger"))
+	if err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("ExportSourceArchive error = %v, want symlink rejection", err)
+	}
+}
+
+func TestWalkArchiveRejectsTooManyEntries(t *testing.T) {
+	archive := filepath.Join(t.TempDir(), "too-many.tar.zst")
+	if err := writeTestArchiveEntries(archive, map[string][]byte{
+		"one.json": []byte("{}\n"),
+		"two.json": []byte("{}\n"),
+	}); err != nil {
+		t.Fatalf("writeTestArchiveEntries returned error: %v", err)
+	}
+
+	err := walkArchiveWithLimits(archive, archiveLimits{MaxEntryBytes: 100, MaxEntries: 1, MaxTotalBytes: 100}, func(*tar.Header, []byte) error {
+		return nil
+	})
+	if err == nil || !strings.Contains(err.Error(), "too many entries") {
+		t.Fatalf("walkArchiveWithLimits error = %v, want too many entries", err)
+	}
+}
+
+func TestWalkArchiveRejectsExcessiveTotalSize(t *testing.T) {
+	archive := filepath.Join(t.TempDir(), "too-large-total.tar.zst")
+	if err := writeTestArchiveEntries(archive, map[string][]byte{
+		"one.json": []byte("1234"),
+		"two.json": []byte("5678"),
+	}); err != nil {
+		t.Fatalf("writeTestArchiveEntries returned error: %v", err)
+	}
+
+	err := walkArchiveWithLimits(archive, archiveLimits{MaxEntryBytes: 100, MaxEntries: 10, MaxTotalBytes: 5}, func(*tar.Header, []byte) error {
+		return nil
+	})
+	if err == nil || !strings.Contains(err.Error(), "total size") {
+		t.Fatalf("walkArchiveWithLimits error = %v, want total size limit", err)
 	}
 }
 
@@ -220,6 +317,9 @@ func TestSafeRootedPathRejectsTraversal(t *testing.T) {
 	tests := []string{
 		"..",
 		"../evil.json",
+		"./evil.json",
+		"safe//evil.json",
+		"safe/../evil.json",
 		"/evil.json",
 		`..\evil.json`,
 		`C:/evil.json`,
@@ -260,6 +360,10 @@ func archiveEntryNames(path string) ([]string, error) {
 }
 
 func writeTestArchive(path, name string, data []byte) error {
+	return writeTestArchiveEntries(path, map[string][]byte{name: data})
+}
+
+func writeTestArchiveEntries(path string, entries map[string][]byte) error {
 	file, err := os.Create(path)
 	if err != nil {
 		return err
@@ -272,11 +376,15 @@ func writeTestArchive(path, name string, data []byte) error {
 	defer encoder.Close()
 	tw := tar.NewWriter(encoder)
 	defer tw.Close()
-	if err := tw.WriteHeader(&tar.Header{Name: name, Mode: 0o644, Size: int64(len(data))}); err != nil {
-		return err
+	for name, data := range entries {
+		if err := tw.WriteHeader(&tar.Header{Name: name, Mode: 0o644, Size: int64(len(data))}); err != nil {
+			return err
+		}
+		if _, err := tw.Write(data); err != nil {
+			return err
+		}
 	}
-	_, err = tw.Write(data)
-	return err
+	return nil
 }
 
 func rewriteArchiveEntry(from, to, name string, replacement []byte) error {

@@ -1,0 +1,34 @@
+{
+  "system": "forgejo",
+  "owner": "example",
+  "repo": "project",
+  "url": "https://forgejo.example.com/example/project",
+  "objects": [
+    {
+      "object": "project",
+      "id": "forgejo:repo:1",
+      "path": "projects/forgejo/example/project.json",
+      "sha256": "d7d0ba27fc760004e594e340008717fec55cb69781a4e48a65e7dcbf581933b1"
+    },
+    {
+      "object": "issue",
+      "number": 1,
+      "id": "forgejo:issue:1",
+      "path": "objects/forgejo/example/project/issues/000001.json",
+      "sha256": "b712a753d099930de62971b69d31cd0c685f94bd3b3a3176acef3b1dd5f13694"
+    },
+    {
+      "object": "label",
+      "id": "forgejo:label:bug",
+      "path": "objects/forgejo/example/project/labels/bug-ecb53f367b35.json",
+      "sha256": "452ed612134ff98128a3b2c31fa4f292a477cfef090dbad5458752bc2e9bb0b6"
+    },
+    {
+      "object": "milestone",
+      "number": 1,
+      "id": "forgejo:milestone:v1",
+      "path": "objects/forgejo/example/project/milestones/000001.json",
+      "sha256": "66d42368b44b2d1f9c5c45b3db77529bf24d0130167ebfe4ca442c895a1e7c30"
+    }
+  ]
+}

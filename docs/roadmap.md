@@ -198,6 +198,8 @@ Release: `v0.2.0-beta.2`.
 
 ## Phase 8: Compatibility Policy And Fixtures
 
+Status: implemented in `v0.2.0-rc.1`.
+
 Goal:
 ```text
 Define what another tool may safely consume.

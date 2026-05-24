@@ -45,11 +45,7 @@ func (w Writer) WriteOperation(operation model.Operation) error {
 		return err
 	}
 	operation.Signature = signature
-	dir := filepath.Join(w.Root, "operations")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return err
-	}
-	return writeJSON(filepath.Join(w.Root, operationRelativePath(operation.ID)), operation)
+	return writeJSONUnderRoot(w.Root, operationRelativePath(operation.ID), operation)
 }
 
 func OperationHash(operation model.Operation) (string, error) {
@@ -139,7 +135,7 @@ func canonicalOperationJSON(operation model.Operation) ([]byte, error) {
 }
 
 func (r Reader) Operations() ([]model.Operation, error) {
-	operations, err := readDirJSON[model.Operation](filepath.Join(r.Root, "operations"))
+	operations, err := readDirJSONRooted[model.Operation](r.Root, "operations")
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -147,6 +143,9 @@ func (r Reader) Operations() ([]model.Operation, error) {
 		return nil, err
 	}
 	sort.Slice(operations, func(i, j int) bool {
+		if operations[i].StartedAt.Equal(operations[j].StartedAt) {
+			return operations[i].ID < operations[j].ID
+		}
 		return operations[i].StartedAt.Before(operations[j].StartedAt)
 	})
 	return operations, nil

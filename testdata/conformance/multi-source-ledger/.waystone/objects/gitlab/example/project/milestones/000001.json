@@ -1,0 +1,17 @@
+{
+  "import_id": "gitlab:example/project",
+  "source": {
+    "system": "gitlab",
+    "owner": "example",
+    "repo": "project",
+    "url": "https://gitlab.example.com/example/project"
+  },
+  "id": "gitlab:milestone:v1",
+  "source_id": 20,
+  "number": 1,
+  "title": "v1",
+  "state": "open",
+  "original_url": "https://gitlab.example.com/example/project/milestones/1",
+  "created_at": "2026-01-01T00:00:00Z",
+  "updated_at": "2026-01-01T00:00:00Z"
+}

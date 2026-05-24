@@ -202,7 +202,7 @@ func (w Writer) writeLedgerMetadata() error {
 		ledger.CreatedAt = current.CreatedAt
 		ledger.DefaultSource = current.DefaultSource
 	}
-	return writeJSON(path, ledger)
+	return writeJSONUnderRoot(w.Root, "ledger.json", ledger)
 }
 
 func (w Writer) SetDefaultSource(source model.Source) error {
@@ -222,7 +222,7 @@ func (w Writer) SetDefaultSource(source model.Source) error {
 		current.DefaultSource = &source
 	}
 	current.UpdatedAt = time.Now().UTC()
-	return writeJSON(filepath.Join(w.Root, "ledger.json"), current)
+	return writeJSONUnderRoot(w.Root, "ledger.json", current)
 }
 
 func gitHubImportTargets(imported model.GitHubImport) []writeTarget {
@@ -426,7 +426,11 @@ func sourceObjectRefs(targets []writeTarget) []model.SourceObjectRef {
 
 func (w Writer) RecordSourceOperation(source model.Source, operation model.Operation) error {
 	var current model.Source
-	path := filepath.Join(w.Root, sourceManifestPath(source))
+	relative := sourceManifestPath(source)
+	path, err := safeRootedFilePath(w.Root, relative)
+	if err != nil {
+		return err
+	}
 	if err := readJSONFile(path, &current); err != nil {
 		return err
 	}
@@ -439,32 +443,31 @@ func (w Writer) RecordSourceOperation(source model.Source, operation model.Opera
 	for i, existing := range current.Operations {
 		if existing.ID == ref.ID {
 			current.Operations[i] = ref
-			return w.writeSourceManifest(path, current)
+			return w.writeSourceManifest(relative, current)
 		}
 	}
 	current.Operations = append(current.Operations, ref)
-	return w.writeSourceManifest(path, current)
+	return w.writeSourceManifest(relative, current)
 }
 
 func (w Writer) writeTarget(target writeTarget) error {
-	path := filepath.Join(w.Root, target.relative)
 	if target.source {
 		source, ok := target.value.(model.Source)
 		if !ok {
 			return fmt.Errorf("source target has unexpected value type %T", target.value)
 		}
-		return w.writeSourceManifest(path, source)
+		return w.writeSourceManifest(target.relative, source)
 	}
-	return writeJSON(path, target.value)
+	return writeJSONUnderRoot(w.Root, target.relative, target.value)
 }
 
-func (w Writer) writeSourceManifest(path string, source model.Source) error {
+func (w Writer) writeSourceManifest(relative string, source model.Source) error {
 	signature, err := w.sourceSignature(source)
 	if err != nil {
 		return err
 	}
 	source.Signature = signature
-	return writeJSON(path, source)
+	return writeJSONUnderRoot(w.Root, relative, source)
 }
 
 func (w Writer) sourceSignature(source model.Source) (*model.OperationSignature, error) {
@@ -530,19 +533,55 @@ func upsertSourceObjectRef(refs []model.SourceObjectRef, ref model.SourceObjectR
 	return append(refs, ref)
 }
 
+func writeJSONUnderRoot(root, relative string, value any) error {
+	path, err := safeRootedWritePath(root, relative)
+	if err != nil {
+		return err
+	}
+	return writeJSONFile(path, value)
+}
+
 func writeJSON(path string, value any) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
-	file, err := os.Create(path) // #nosec G304 -- path is constructed inside the selected ledger root.
+	return writeJSONFile(path, value)
+}
+
+func writeJSONFile(path string, value any) error {
+	data, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	data = append(data, '\n')
 
-	encoder := json.NewEncoder(file)
-	encoder.SetIndent("", "  ")
-	return encoder.Encode(value)
+	file, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".tmp-*") // #nosec G304 -- path is constructed inside the selected ledger root.
+	if err != nil {
+		return err
+	}
+	tempPath := file.Name()
+	cleanup := true
+	defer func() {
+		if cleanup {
+			_ = os.Remove(tempPath)
+		}
+	}()
+	if _, err := file.Write(data); err != nil {
+		_ = file.Close()
+		return err
+	}
+	if err := file.Sync(); err != nil {
+		_ = file.Close()
+		return err
+	}
+	if err := file.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tempPath, path); err != nil {
+		return err
+	}
+	cleanup = false
+	return nil
 }
 
 func sourceScopedPath(source model.Source) string {

@@ -68,6 +68,9 @@ func archiveFileRefs(root string) ([]model.ArchiveFileRef, error) {
 		if err != nil {
 			return err
 		}
+		if err := rejectSymlinkEntry(filePath, entry); err != nil {
+			return err
+		}
 		if entry.IsDir() {
 			return nil
 		}
@@ -92,7 +95,7 @@ func archiveFileRefs(root string) ([]model.ArchiveFileRef, error) {
 		if err != nil {
 			return nil, err
 		}
-		data, err := os.ReadFile(filePath) // #nosec G304 -- path is validated by SafeRootedPath before reading.
+		data, err := readFileNoSymlink(filePath)
 		if err != nil {
 			return nil, err
 		}
@@ -157,6 +160,9 @@ func VerifyArchiveManifest(archivePath string) (model.ArchiveManifest, error) {
 	}
 	expected := make(map[string]model.ArchiveFileRef, len(manifest.Files))
 	for _, ref := range manifest.Files {
+		if _, ok := expected[ref.Path]; ok {
+			return model.ArchiveManifest{}, fmt.Errorf("archive manifest lists duplicate path %s", ref.Path)
+		}
 		if ref.Path == archiveManifestName {
 			return model.ArchiveManifest{}, fmt.Errorf("archive manifest must not list itself")
 		}
@@ -258,6 +264,24 @@ func readArchiveEntries(archivePath string) (model.ArchiveManifest, map[string][
 }
 
 func walkArchive(archivePath string, visit func(*tar.Header, []byte) error) error {
+	return walkArchiveWithLimits(archivePath, defaultArchiveLimits(), visit)
+}
+
+type archiveLimits struct {
+	MaxEntryBytes int64
+	MaxEntries    int
+	MaxTotalBytes int64
+}
+
+func defaultArchiveLimits() archiveLimits {
+	return archiveLimits{
+		MaxEntryBytes: maxArchiveEntryBytes,
+		MaxEntries:    maxArchiveEntries,
+		MaxTotalBytes: maxArchiveTotalBytes,
+	}
+}
+
+func walkArchiveWithLimits(archivePath string, limits archiveLimits, visit func(*tar.Header, []byte) error) error {
 	file, err := os.Open(archivePath) // #nosec G304 -- archive input path is an explicit user-selected file.
 	if err != nil {
 		return err
@@ -269,6 +293,8 @@ func walkArchive(archivePath string, visit func(*tar.Header, []byte) error) erro
 	}
 	defer decoder.Close()
 	tr := tar.NewReader(decoder)
+	var entries int
+	var totalBytes int64
 	for {
 		header, err := tr.Next()
 		if err == io.EOF {
@@ -280,8 +306,8 @@ func walkArchive(archivePath string, visit func(*tar.Header, []byte) error) erro
 		if header.Typeflag != tar.TypeReg {
 			return fmt.Errorf("unsupported archive entry type for %s", header.Name)
 		}
-		if header.Size < 0 || header.Size > maxArchiveEntryBytes {
-			return fmt.Errorf("archive entry %s is too large", header.Name)
+		if err := checkArchiveLimits(header, limits, &entries, &totalBytes); err != nil {
+			return err
 		}
 		data, err := io.ReadAll(io.LimitReader(tr, header.Size))
 		if err != nil {
@@ -294,6 +320,21 @@ func walkArchive(archivePath string, visit func(*tar.Header, []byte) error) erro
 			return err
 		}
 	}
+}
+
+func checkArchiveLimits(header *tar.Header, limits archiveLimits, entries *int, totalBytes *int64) error {
+	*entries = *entries + 1
+	if limits.MaxEntries > 0 && *entries > limits.MaxEntries {
+		return fmt.Errorf("archive has too many entries")
+	}
+	if header.Size < 0 || limits.MaxEntryBytes > 0 && header.Size > limits.MaxEntryBytes {
+		return fmt.Errorf("archive entry %s is too large", header.Name)
+	}
+	*totalBytes += header.Size
+	if limits.MaxTotalBytes > 0 && *totalBytes > limits.MaxTotalBytes {
+		return fmt.Errorf("archive total size exceeds limit")
+	}
+	return nil
 }
 
 func archiveManifestSigningBytes(manifest model.ArchiveManifest) ([]byte, error) {
