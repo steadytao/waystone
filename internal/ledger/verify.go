@@ -53,6 +53,9 @@ func (r Reader) Verify() (Verification, error) {
 		if err != nil {
 			return err
 		}
+		if err := rejectSymlinkEntry(path, entry); err != nil {
+			return err
+		}
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
 			return nil
 		}
@@ -73,7 +76,7 @@ func (r Reader) Verify() (Verification, error) {
 	var changes []model.ObjectChange
 	hash := sha256.New()
 	for _, path := range files {
-		data, err := os.ReadFile(path) // #nosec G304 -- verification walks files under the configured ledger root.
+		data, err := readFileNoSymlink(path)
 		if err != nil {
 			return Verification{}, err
 		}
@@ -156,7 +159,7 @@ func (r Reader) VerifyOperations() (OperationVerification, error) {
 		}
 
 		relative := filepath.ToSlash(operationRelativePath(operation.ID))
-		data, err := os.ReadFile(filepath.Join(r.Root, relative)) // #nosec G304 -- operation path is derived from recorded operation ID.
+		data, err := readFileNoSymlink(filepath.Join(r.Root, relative))
 		if err != nil {
 			return OperationVerification{}, err
 		}
@@ -199,6 +202,9 @@ func (r Reader) VerifyOperations() (OperationVerification, error) {
 			return OperationVerification{}, fmt.Errorf("file %s hash mismatch", path)
 		}
 	}
+	if err := r.VerifySourceObjectRefs(); err != nil {
+		return OperationVerification{}, err
+	}
 
 	return OperationVerification{
 		Operations: len(operations),
@@ -206,6 +212,38 @@ func (r Reader) VerifyOperations() (OperationVerification, error) {
 		Checksum:   hex.EncodeToString(hash.Sum(nil)),
 		Changes:    changes,
 	}, nil
+}
+
+func (r Reader) VerifySourceObjectRefs() error {
+	sources, err := r.Sources()
+	if err != nil {
+		return err
+	}
+	for _, source := range sources {
+		sourceName := SourceSpec(source)
+		seen := map[string]bool{}
+		for _, object := range source.Objects {
+			if object.Path == "" {
+				return fmt.Errorf("source %s has object ref with empty path", sourceName)
+			}
+			if object.SHA256 == "" {
+				return fmt.Errorf("source %s object %s has no sha256", sourceName, object.Path)
+			}
+			path := filepath.ToSlash(object.Path)
+			if seen[path] {
+				return fmt.Errorf("source %s has duplicate object ref %s", sourceName, path)
+			}
+			seen[path] = true
+			actualHash, err := r.fileHash(path)
+			if err != nil {
+				return fmt.Errorf("source %s object %s: %w", sourceName, path, err)
+			}
+			if actualHash != object.SHA256 {
+				return fmt.Errorf("source %s object %s hash mismatch", sourceName, path)
+			}
+		}
+	}
+	return nil
 }
 
 func (r Reader) VerifyOperationSignatures() (OperationSignatureVerification, error) {
@@ -228,6 +266,9 @@ func (r Reader) VerifyOperationSignatures() (OperationSignatureVerification, err
 		}
 		verification.Valid++
 		if policy.Trusts(operation.Signature.IdentityID) {
+			if err := r.verifyTrustedSignatureIdentity(operation.Signature); err != nil {
+				return OperationSignatureVerification{}, fmt.Errorf("operation %s signature: %w", operation.ID, err)
+			}
 			verification.Trusted++
 		} else {
 			verification.Untrusted++
@@ -285,6 +326,9 @@ func (r Reader) VerifySourceSignatures() (SourceSignatureVerification, error) {
 		}
 		verification.Valid++
 		if policy.Trusts(source.Signature.IdentityID) {
+			if err := r.verifyTrustedSignatureIdentity(source.Signature); err != nil {
+				return SourceSignatureVerification{}, fmt.Errorf("source %s signature: %w", SourceSpec(source), err)
+			}
 			verification.Trusted++
 		} else {
 			verification.Untrusted++
@@ -322,12 +366,29 @@ func verifySourceSignature(source model.Source) error {
 	return nil
 }
 
+func (r Reader) verifyTrustedSignatureIdentity(signature *model.OperationSignature) error {
+	if signature == nil {
+		return fmt.Errorf("missing signature")
+	}
+	identity, err := r.Identity(signature.IdentityID)
+	if err != nil {
+		return err
+	}
+	if identity.Algorithm != signature.Algorithm {
+		return fmt.Errorf("signature algorithm %q does not match trusted identity %q algorithm %q", signature.Algorithm, identity.ID, identity.Algorithm)
+	}
+	if identity.PublicKey != signature.PublicKey {
+		return fmt.Errorf("signature public key does not match trusted identity %q", identity.ID)
+	}
+	return nil
+}
+
 func (r Reader) fileHash(relative string) (string, error) {
-	path, err := SafeRootedPath(r.Root, relative)
+	path, err := safeRootedFilePath(r.Root, relative)
 	if err != nil {
 		return "", err
 	}
-	data, err := os.ReadFile(path) // #nosec G304 -- path is validated by SafeRootedPath before reading.
+	data, err := readFileNoSymlink(path)
 	if err != nil {
 		return "", err
 	}

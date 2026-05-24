@@ -24,6 +24,24 @@ const migrationPlanVersion = "waystone.migration_plan.v1"
 const migrationStrategyVersion = "waystone.migration_strategy.v1"
 const migrationLossReportVersion = "waystone.migration_loss_report.v1"
 
+var implementedMigrationSourceSystems = map[string]bool{
+	"forgejo":  true,
+	"gitea":    true,
+	"github":   true,
+	"gitlab":   true,
+	"waystone": true,
+}
+
+var implementedMigrationRecordObjects = map[string]bool{
+	"comment":        true,
+	"issue":          true,
+	"label":          true,
+	"milestone":      true,
+	"pull_request":   true,
+	"release":        true,
+	"review_comment": true,
+}
+
 type migrationStrategyFile struct {
 	Version  string                      `json:"version"`
 	Strategy model.MigrationPlanStrategy `json:"strategy"`
@@ -295,6 +313,9 @@ func readMigrationStrategyFile(path string) (migrationStrategyFile, error) {
 		return migrationStrategyFile{}, err
 	}
 	defer file.Close()
+	if err := rejectDuplicateJSONNames(file, "migration strategy file must contain exactly one JSON object"); err != nil {
+		return migrationStrategyFile{}, err
+	}
 	decoder := json.NewDecoder(file)
 	decoder.DisallowUnknownFields()
 	var strategy migrationStrategyFile
@@ -551,7 +572,7 @@ func sourceMigrationPlanRecords(reader ledger.Reader, from, to model.Source, num
 		}
 	}
 	for _, pullRequest := range pullRequests {
-		comments, err := reader.SourceComments(from, pullRequest.Number)
+		comments, err := reader.SourcePullRequestComments(from, pullRequest.Number)
 		if err != nil {
 			return nil, err
 		}
@@ -653,33 +674,125 @@ func readMigrationPlan(path string) (model.MigrationPlan, error) {
 		return model.MigrationPlan{}, err
 	}
 	defer file.Close()
-	var plan model.MigrationPlan
-	if err := json.NewDecoder(file).Decode(&plan); err != nil {
+	if err := rejectDuplicateJSONNames(file, "migration plan must contain exactly one JSON object"); err != nil {
 		return model.MigrationPlan{}, err
 	}
+	decoder := json.NewDecoder(file)
+	var plan model.MigrationPlan
+	if err := decoder.Decode(&plan); err != nil {
+		return model.MigrationPlan{}, err
+	}
+	var trailing json.RawMessage
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		return model.MigrationPlan{}, errors.New("migration plan must contain exactly one JSON object")
+	}
 	return plan, nil
+}
+
+func rejectDuplicateJSONNames(file *os.File, singleObjectError string) error {
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		return err
+	}
+	decoder := json.NewDecoder(file)
+	if err := rejectDuplicateJSONValueNames(decoder); err != nil {
+		return err
+	}
+	if _, err := decoder.Token(); err != io.EOF {
+		if err != nil {
+			return err
+		}
+		return errors.New(singleObjectError)
+	}
+	_, err := file.Seek(0, io.SeekStart)
+	return err
+}
+
+func rejectDuplicateJSONValueNames(decoder *json.Decoder) error {
+	token, err := decoder.Token()
+	if err != nil {
+		return err
+	}
+	delim, ok := token.(json.Delim)
+	if !ok {
+		return nil
+	}
+	switch delim {
+	case '{':
+		seen := map[string]bool{}
+		for decoder.More() {
+			keyToken, err := decoder.Token()
+			if err != nil {
+				return err
+			}
+			key, ok := keyToken.(string)
+			if !ok {
+				return fmt.Errorf("JSON object member name must be a string, got %T", keyToken)
+			}
+			if seen[key] {
+				return fmt.Errorf("duplicate JSON object member %q", key)
+			}
+			seen[key] = true
+			if err := rejectDuplicateJSONValueNames(decoder); err != nil {
+				return err
+			}
+		}
+		end, err := decoder.Token()
+		if err != nil {
+			return err
+		}
+		if end != json.Delim('}') {
+			return fmt.Errorf("expected JSON object end, got %v", end)
+		}
+	case '[':
+		for decoder.More() {
+			if err := rejectDuplicateJSONValueNames(decoder); err != nil {
+				return err
+			}
+		}
+		end, err := decoder.Token()
+		if err != nil {
+			return err
+		}
+		if end != json.Delim(']') {
+			return fmt.Errorf("expected JSON array end, got %v", end)
+		}
+	default:
+		return fmt.Errorf("unexpected JSON delimiter %q", delim)
+	}
+	return nil
 }
 
 func validateMigrationPlan(plan model.MigrationPlan, allowUnknownVersion bool) error {
 	if plan.Version != migrationPlanVersion && !allowUnknownVersion {
 		return fmt.Errorf("unsupported migration plan version %q", plan.Version)
 	}
-	if strings.TrimSpace(plan.From) == "" {
-		return errors.New("migration plan from is required")
+	if plan.CreatedAt.IsZero() {
+		return errors.New("migration plan created_at is required")
 	}
-	if strings.TrimSpace(plan.To) == "" {
-		return errors.New("migration plan to is required")
+	if strings.TrimSpace(plan.ToolVersion) == "" {
+		return errors.New("migration plan tool_version is required")
 	}
-	if err := validateMigrationPlanSources(plan.Sources); err != nil {
+	fromSources, err := validateMigrationPlanSourceList("from", plan.From)
+	if err != nil {
+		return err
+	}
+	toSource, err := validateMigrationPlanSourceSpec("to", plan.To)
+	if err != nil {
+		return err
+	}
+	sources, err := validateMigrationPlanSources(plan.Sources)
+	if err != nil {
+		return err
+	}
+	if err := validateMigrationPlanSourceSet(fromSources, sources); err != nil {
 		return err
 	}
 	if err := validateMigrationPlanStrategy(plan.Strategy); err != nil {
 		return err
 	}
 	seen := map[string]bool{}
-	sources := migrationPlanSourceSet(plan.Sources)
 	for i, record := range plan.Records {
-		if err := validateMigrationPlanRecord(i, record, plan.Strategy, sources); err != nil {
+		if err := validateMigrationPlanRecord(i, record, plan.Strategy, sources, toSource); err != nil {
 			return err
 		}
 		key := record.Source + "\x00" + record.Object + "\x00" + record.SourceID
@@ -691,29 +804,79 @@ func validateMigrationPlan(plan model.MigrationPlan, allowUnknownVersion bool) e
 	return nil
 }
 
-func validateMigrationPlanSources(sources []model.MigrationPlanSource) error {
+func validateMigrationPlanSourceList(field, value string) ([]string, error) {
+	if strings.TrimSpace(value) == "" {
+		return nil, fmt.Errorf("migration plan %s is required", field)
+	}
+	var sources []string
+	seen := map[string]bool{}
+	for _, spec := range strings.Split(value, ",") {
+		spec = strings.TrimSpace(spec)
+		if spec == "" {
+			return nil, fmt.Errorf("migration plan %s contains an empty source", field)
+		}
+		canonical, err := validateMigrationPlanSourceSpec(field, spec)
+		if err != nil {
+			return nil, err
+		}
+		if seen[canonical] {
+			return nil, fmt.Errorf("migration plan %s contains duplicate source %q", field, canonical)
+		}
+		seen[canonical] = true
+		sources = append(sources, canonical)
+	}
+	return sources, nil
+}
+
+func validateMigrationPlanSourceSpec(field, value string) (string, error) {
+	if strings.TrimSpace(value) == "" {
+		return "", fmt.Errorf("migration plan %s is required", field)
+	}
+	source, err := ledger.ParseSourceSpec(value)
+	if err != nil {
+		return "", fmt.Errorf("migration plan %s %q is invalid: %w", field, value, err)
+	}
+	if !implementedMigrationSourceSystems[source.System] {
+		return "", fmt.Errorf("migration plan %s %q uses unsupported source system %q", field, value, source.System)
+	}
+	canonical := ledger.SourceSpec(source)
+	if value != canonical {
+		return "", fmt.Errorf("migration plan %s %q must use canonical source namespace %q", field, value, canonical)
+	}
+	return canonical, nil
+}
+
+func validateMigrationPlanSources(sources []model.MigrationPlanSource) (map[string]bool, error) {
 	if len(sources) == 0 {
-		return errors.New("migration plan sources are required")
+		return nil, errors.New("migration plan sources are required")
 	}
 	seen := map[string]bool{}
 	for i, source := range sources {
 		if strings.TrimSpace(source.Source) == "" {
-			return fmt.Errorf("source %d source is required", i)
+			return nil, fmt.Errorf("source %d source is required", i)
 		}
-		if seen[source.Source] {
-			return fmt.Errorf("duplicate migration plan source %q", source.Source)
+		canonical, err := validateMigrationPlanSourceSpec(fmt.Sprintf("sources[%d].source", i), source.Source)
+		if err != nil {
+			return nil, err
 		}
-		seen[source.Source] = true
+		if seen[canonical] {
+			return nil, fmt.Errorf("duplicate migration plan source %q", canonical)
+		}
+		seen[canonical] = true
 	}
-	return nil
+	return seen, nil
 }
 
-func migrationPlanSourceSet(sources []model.MigrationPlanSource) map[string]bool {
-	set := map[string]bool{}
-	for _, source := range sources {
-		set[source.Source] = true
+func validateMigrationPlanSourceSet(fromSources []string, sources map[string]bool) error {
+	if len(fromSources) != len(sources) {
+		return errors.New("migration plan sources must match migration plan from")
 	}
-	return set
+	for _, source := range fromSources {
+		if !sources[source] {
+			return fmt.Errorf("migration plan from source %q is not declared in plan sources", source)
+		}
+	}
+	return nil
 }
 
 func validateMigrationPlanStrategy(strategy model.MigrationPlanStrategy) error {
@@ -747,15 +910,21 @@ func validateMigrationPlanStrategy(strategy model.MigrationPlanStrategy) error {
 	return nil
 }
 
-func validateMigrationPlanRecord(index int, record model.MigrationPlanRecord, strategy model.MigrationPlanStrategy, sources map[string]bool) error {
+func validateMigrationPlanRecord(index int, record model.MigrationPlanRecord, strategy model.MigrationPlanStrategy, sources map[string]bool, targetSource string) error {
 	if strings.TrimSpace(record.Object) == "" {
 		return fmt.Errorf("record %d object is required", index)
+	}
+	if !implementedMigrationRecordObjects[record.Object] {
+		return fmt.Errorf("record %d object %q is not supported", index, record.Object)
 	}
 	if strings.TrimSpace(record.Source) == "" {
 		return fmt.Errorf("record %d source is required", index)
 	}
 	if !sources[record.Source] {
 		return fmt.Errorf("record %d source %q is not declared in plan sources", index, record.Source)
+	}
+	if record.SourceNumber < 0 {
+		return fmt.Errorf("record %d source_number must not be negative", index)
 	}
 	if strings.TrimSpace(record.SourceID) == "" {
 		return fmt.Errorf("record %d source_id is required", index)
@@ -765,6 +934,13 @@ func validateMigrationPlanRecord(index int, record model.MigrationPlanRecord, st
 	}
 	if strings.TrimSpace(record.TargetSource) == "" {
 		return fmt.Errorf("record %d target_source is required", index)
+	}
+	canonicalTarget, err := validateMigrationPlanSourceSpec(fmt.Sprintf("record %d target_source", index), record.TargetSource)
+	if err != nil {
+		return err
+	}
+	if canonicalTarget != targetSource {
+		return fmt.Errorf("record %d target_source %q does not match migration plan to %q", index, record.TargetSource, targetSource)
 	}
 	if strings.TrimSpace(record.TargetKey) == "" {
 		return fmt.Errorf("record %d target_key is required", index)
@@ -921,16 +1097,16 @@ func sourceMigrationContinuationCounts(reader ledger.Reader, source model.Source
 }
 
 func sourceConversationCommentCount(reader ledger.Reader, source model.Source, issues []model.Issue, pullRequests []model.PullRequest) (int, error) {
-	numbers := map[int]bool{}
+	var count int
 	for _, issue := range issues {
-		numbers[issue.Number] = true
+		comments, err := reader.SourceComments(source, issue.Number)
+		if err != nil {
+			return 0, err
+		}
+		count += len(comments)
 	}
 	for _, pullRequest := range pullRequests {
-		numbers[pullRequest.Number] = true
-	}
-	var count int
-	for number := range numbers {
-		comments, err := reader.SourceComments(source, number)
+		comments, err := reader.SourcePullRequestComments(source, pullRequest.Number)
 		if err != nil {
 			return 0, err
 		}
@@ -1010,15 +1186,8 @@ func collectMigrationSourceFacts(reader ledger.Reader, source model.Source) (mig
 		facts.PullRequestNumbers = append(facts.PullRequestNumbers, pullRequest.Number)
 		addAuthorLogin(authorSet, pullRequest.Author.Login)
 	}
-	numbers := map[int]bool{}
 	for _, issue := range issues {
-		numbers[issue.Number] = true
-	}
-	for _, pullRequest := range pullRequests {
-		numbers[pullRequest.Number] = true
-	}
-	for number := range numbers {
-		comments, err := reader.SourceComments(source, number)
+		comments, err := reader.SourceComments(source, issue.Number)
 		if err != nil {
 			return facts, err
 		}
@@ -1027,6 +1196,13 @@ func collectMigrationSourceFacts(reader ledger.Reader, source model.Source) (mig
 		}
 	}
 	for _, pullRequest := range pullRequests {
+		comments, err := reader.SourcePullRequestComments(source, pullRequest.Number)
+		if err != nil {
+			return facts, err
+		}
+		for _, comment := range comments {
+			addAuthorLogin(authorSet, comment.Author.Login)
+		}
 		reviewComments, err := reader.SourceReviewComments(source, pullRequest.Number)
 		if err != nil {
 			return facts, err

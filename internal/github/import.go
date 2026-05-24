@@ -78,11 +78,11 @@ func (c *Client) issues(ctx context.Context, owner, repo string) ([]model.Issue,
 	return out, pullNumbers, commentNumbers, err
 }
 
-func (c *Client) issueComments(ctx context.Context, owner, repo string, number int) ([]model.Comment, error) {
+func (c *Client) issueComments(ctx context.Context, owner, repo string, number int, parentObject string) ([]model.Comment, error) {
 	var out []model.Comment
 	err := paginate(ctx, c, fmt.Sprintf("/repos/%s/%s/issues/%d/comments", owner, repo, number), nil, func(items []ghComment) error {
 		for _, item := range items {
-			out = append(out, convertComment(number, item))
+			out = append(out, convertComment(number, parentObject, item))
 		}
 		return nil
 	})
@@ -166,16 +166,17 @@ func convertIssue(item ghIssue) model.Issue {
 	}
 }
 
-func convertComment(number int, item ghComment) model.Comment {
+func convertComment(number int, parentObject string, item ghComment) model.Comment {
 	return model.Comment{
-		ID:          stableID("github", "issue_comment", strconv.FormatInt(item.ID, 10)),
-		SourceID:    item.ID,
-		IssueNumber: number,
-		Author:      convertAuthor(item.User),
-		Body:        item.Body,
-		OriginalURL: item.HTMLURL,
-		CreatedAt:   item.CreatedAt,
-		UpdatedAt:   item.UpdatedAt,
+		ID:           stableID("github", "issue_comment", strconv.FormatInt(item.ID, 10)),
+		SourceID:     item.ID,
+		IssueNumber:  number,
+		ParentObject: parentObject,
+		Author:       convertAuthor(item.User),
+		Body:         item.Body,
+		OriginalURL:  item.HTMLURL,
+		CreatedAt:    item.CreatedAt,
+		UpdatedAt:    item.UpdatedAt,
 	}
 }
 

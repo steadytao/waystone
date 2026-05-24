@@ -1,0 +1,7 @@
+{
+  "id": "gitea:repo:1",
+  "name": "example/project",
+  "url": "https://gitea.example.com/example/project",
+  "created_at": "2026-01-01T00:00:00Z",
+  "updated_at": "2026-01-02T00:00:00Z"
+}

@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -384,12 +385,27 @@ func writeSourceDefaultOperation(root string, args []string, startedAt time.Time
 }
 
 func fileSHA256(path string) (string, error) {
-	data, err := os.ReadFile(path) // #nosec G304 -- checksum path comes from a source manifest object reference.
+	file, err := openChecksumFile(path)
 	if err != nil {
 		return "", err
 	}
-	sum := sha256.Sum256(data)
-	return hex.EncodeToString(sum[:]), nil
+	defer file.Close()
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+func openChecksumFile(path string) (*os.File, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return nil, err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return nil, fmt.Errorf("ledger path %s is a symlink", path)
+	}
+	return os.Open(path) // #nosec G304 -- callers pass ledger metadata paths or paths already scoped by ledger.SafeRootedPath.
 }
 
 func fileExists(path string) bool {

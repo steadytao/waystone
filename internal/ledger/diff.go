@@ -155,7 +155,11 @@ func (w Writer) diffTarget(target writeTarget) (string, error) {
 		return "", err
 	}
 
-	current, err := os.ReadFile(filepath.Join(w.Root, target.relative))
+	path, err := safeRootedFilePath(w.Root, target.relative)
+	if err != nil {
+		return "", err
+	}
+	current, err := readFileNoSymlink(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return "created", nil

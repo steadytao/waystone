@@ -27,12 +27,18 @@ type JSONExportFile struct {
 }
 
 func ExportJSON(root, out string, compact bool) error {
+	if root == "" {
+		return fmt.Errorf("ledger root must not be empty")
+	}
 	if _, err := (Reader{Root: root}).VerifyOperations(); err != nil {
 		return err
 	}
 	var files []string
 	if err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
+			return err
+		}
+		if err := rejectSymlinkEntry(path, entry); err != nil {
 			return err
 		}
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
@@ -51,7 +57,7 @@ func ExportJSON(root, out string, compact bool) error {
 		Files:      make([]JSONExportFile, 0, len(files)),
 	}
 	for _, path := range files {
-		data, err := os.ReadFile(path) // #nosec G304 -- JSON export walks files under the configured ledger root.
+		data, err := readFileNoSymlink(path)
 		if err != nil {
 			return err
 		}
@@ -70,7 +76,7 @@ func ExportJSON(root, out string, compact bool) error {
 		})
 	}
 
-	file, err := os.Create(out)
+	file, err := os.Create(out) // #nosec G304 -- JSON export output path is an explicit user-selected destination.
 	if err != nil {
 		return err
 	}

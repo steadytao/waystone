@@ -44,7 +44,7 @@ func (KeyringStore) SaveGitHubToken(token GitHubToken) error {
 	if err != nil {
 		return err
 	}
-	data, err := json.Marshal(token)
+	data, err := json.Marshal(token) // #nosec G117 -- the OS credential store payload intentionally contains the GitHub token.
 	if err != nil {
 		return err
 	}
@@ -95,7 +95,7 @@ func (s PlaintextStore) SaveGitHubToken(token GitHubToken) error {
 	if err := os.MkdirAll(s.Root, 0o700); err != nil {
 		return err
 	}
-	data, err := json.MarshalIndent(token, "", "  ")
+	data, err := json.MarshalIndent(token, "", "  ") // #nosec G117 -- --plain-file-store explicitly persists the GitHub token as local plaintext.
 	if err != nil {
 		return err
 	}

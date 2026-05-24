@@ -180,19 +180,20 @@ type Issue struct {
 	OriginalURL string    `json:"original_url"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
-	ClosedAt    time.Time `json:"closed_at,omitempty"`
+	ClosedAt    time.Time `json:"closed_at,omitempty,omitzero"`
 }
 
 type Comment struct {
 	Provenance
-	ID          string    `json:"id"`
-	SourceID    int64     `json:"source_id"`
-	IssueNumber int       `json:"issue_number"`
-	Author      Author    `json:"author"`
-	Body        string    `json:"body,omitempty"`
-	OriginalURL string    `json:"original_url"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID           string    `json:"id"`
+	SourceID     int64     `json:"source_id"`
+	IssueNumber  int       `json:"issue_number"`
+	ParentObject string    `json:"parent_object,omitempty"`
+	Author       Author    `json:"author"`
+	Body         string    `json:"body,omitempty"`
+	OriginalURL  string    `json:"original_url"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 type IssueEvent struct {
@@ -224,8 +225,8 @@ type PullRequest struct {
 	OriginalURL string    `json:"original_url"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
-	ClosedAt    time.Time `json:"closed_at,omitempty"`
-	MergedAt    time.Time `json:"merged_at,omitempty"`
+	ClosedAt    time.Time `json:"closed_at,omitempty,omitzero"`
+	MergedAt    time.Time `json:"merged_at,omitempty,omitzero"`
 }
 
 type ReviewComment struct {
@@ -251,8 +252,8 @@ type Label struct {
 	Name        string    `json:"name"`
 	Color       string    `json:"color,omitempty"`
 	Description string    `json:"description,omitempty"`
-	CreatedAt   time.Time `json:"created_at,omitempty"`
-	UpdatedAt   time.Time `json:"updated_at,omitempty"`
+	CreatedAt   time.Time `json:"created_at,omitempty,omitzero"`
+	UpdatedAt   time.Time `json:"updated_at,omitempty,omitzero"`
 }
 
 type Milestone struct {
@@ -266,8 +267,8 @@ type Milestone struct {
 	OriginalURL string    `json:"original_url"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
-	ClosedAt    time.Time `json:"closed_at,omitempty"`
-	DueOn       time.Time `json:"due_on,omitempty"`
+	ClosedAt    time.Time `json:"closed_at,omitempty,omitzero"`
+	DueOn       time.Time `json:"due_on,omitempty,omitzero"`
 }
 
 type Release struct {
@@ -282,5 +283,5 @@ type Release struct {
 	Prerelease  bool      `json:"prerelease"`
 	OriginalURL string    `json:"original_url"`
 	CreatedAt   time.Time `json:"created_at"`
-	PublishedAt time.Time `json:"published_at,omitempty"`
+	PublishedAt time.Time `json:"published_at,omitempty,omitzero"`
 }

@@ -1,0 +1,34 @@
+{
+  "system": "github",
+  "owner": "example",
+  "repo": "project",
+  "url": "https://github.com/example/project",
+  "objects": [
+    {
+      "object": "project",
+      "id": "github:repo:1",
+      "path": "projects/github/example/project.json",
+      "sha256": "a6b4eef84d3a7393d5a54dfed7f9dbb70c25b5e5ed523a9739c8eb405cd2f68b"
+    },
+    {
+      "object": "issue",
+      "number": 1,
+      "id": "github:issue:1",
+      "path": "objects/github/example/project/issues/000001.json",
+      "sha256": "a8e469c5650bf12a23dd600e42bfc9a6166c38ccb72fa0bf10da2ee7357f8216"
+    },
+    {
+      "object": "label",
+      "id": "github:label:bug",
+      "path": "objects/github/example/project/labels/bug-ecb53f367b35.json",
+      "sha256": "aa7976cde7a3b6b6d3add5975840e4b5829eb58c97deca7f5b8c431751139ad8"
+    },
+    {
+      "object": "milestone",
+      "number": 1,
+      "id": "github:milestone:v1",
+      "path": "objects/github/example/project/milestones/000001.json",
+      "sha256": "b1f5f4e217592283bfe0030d2765c140f8f7954f6cffde18f472e27c548d4e14"
+    }
+  ]
+}

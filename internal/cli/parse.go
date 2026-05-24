@@ -15,7 +15,16 @@ import (
 )
 
 func gitConfig(key string) string {
-	out, err := exec.Command("git", "config", "--get", key).Output()
+	var out []byte
+	var err error
+	switch key {
+	case "user.name":
+		out, err = exec.Command("git", "config", "--get", "user.name").Output()
+	case "user.email":
+		out, err = exec.Command("git", "config", "--get", "user.email").Output()
+	default:
+		return ""
+	}
 	if err != nil {
 		return ""
 	}

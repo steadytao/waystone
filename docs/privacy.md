@@ -12,7 +12,7 @@ If no token is provided through the environment, `waystone github auth login` us
 
 ## Imported Data
 
-Waystone imports repository metadata, issues, pull requests, comments, labels, milestones and releases from GitHub.
+Waystone imports repository or project metadata, issues, pull requests or merge requests, comments or forge notes, labels, milestones and releases from supported providers where implemented.
 
 For public repositories this is usually public project discussion but the local ledger can still contain sensitive context depending on what participants wrote.
 
@@ -39,7 +39,9 @@ explicitly if a command should record that actor metadata.
 
 ## Network Access
 
-GitHub import, refresh and safe archive import may contact GitHub.
+GitHub, GitLab, Forgejo and Gitea import commands may contact the configured forge API.
+
+`source refresh` and safe archive import currently contact GitHub only. Safe import uses authenticated GitHub API access to confirm `github:` source repositories when present.
 
 Local browse, search, status, timeline, verify and inspect commands read the local ledger only.
 

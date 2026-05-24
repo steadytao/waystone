@@ -1,0 +1,220 @@
+{
+  "version": "waystone.migration_plan.v1",
+  "created_at": "2026-01-01T00:00:00Z",
+  "tool_version": "conformance-fixture",
+  "from": "github:example/project, gitlab:example/project, forgejo:example/project, gitea:example/project, waystone:example/project",
+  "sources": [
+    {
+      "source": "github:example/project"
+    },
+    {
+      "source": "gitlab:example/project"
+    },
+    {
+      "source": "forgejo:example/project"
+    },
+    {
+      "source": "gitea:example/project"
+    },
+    {
+      "source": "waystone:example/project"
+    }
+  ],
+  "to": "waystone:example/project",
+  "strategy": {
+    "numbering_strategy": "preserve-source-numbering",
+    "author_mapping_strategy": "preserve-source-author",
+    "label_mapping_strategy": "preserve-source-labels",
+    "milestone_mapping_strategy": "preserve-source-milestones",
+    "state_mapping_strategy": "preserve",
+    "change_proposal_strategy": "preserve-source-term",
+    "timestamp_strategy": "preserve-source-time",
+    "collision_strategy": "fail",
+    "attachment_strategy": "link-only",
+    "visibility_strategy": "preserve-where-supported",
+    "comment_strategy": "preserve-order",
+    "unsupported_record_strategy": "report",
+    "target_write_strategy": "none"
+  },
+  "records": [
+    {
+      "object": "issue",
+      "source": "forgejo:example/project",
+      "source_id": "forgejo:issue:1",
+      "source_number": 1,
+      "source_url": "https://forgejo.example.com/example/project/issues/1",
+      "waystone_id": "forgejo:issue:1",
+      "target_source": "waystone:example/project",
+      "target_key": "forgejo:example/project:issue:1",
+      "numbering_strategy": "preserve-source-numbering"
+    },
+    {
+      "object": "label",
+      "source": "forgejo:example/project",
+      "source_id": "forgejo:label:bug",
+      "waystone_id": "forgejo:label:bug",
+      "target_source": "waystone:example/project",
+      "target_key": "forgejo:example/project:label:forgejo:label:bug",
+      "numbering_strategy": "preserve-source-numbering"
+    },
+    {
+      "object": "milestone",
+      "source": "forgejo:example/project",
+      "source_id": "forgejo:milestone:v1",
+      "source_number": 1,
+      "source_url": "https://forgejo.example.com/example/project/milestones/1",
+      "waystone_id": "forgejo:milestone:v1",
+      "target_source": "waystone:example/project",
+      "target_key": "forgejo:example/project:milestone:1",
+      "numbering_strategy": "preserve-source-numbering"
+    },
+    {
+      "object": "issue",
+      "source": "gitea:example/project",
+      "source_id": "gitea:issue:1",
+      "source_number": 1,
+      "source_url": "https://gitea.example.com/example/project/issues/1",
+      "waystone_id": "gitea:issue:1",
+      "target_source": "waystone:example/project",
+      "target_key": "gitea:example/project:issue:1",
+      "numbering_strategy": "preserve-source-numbering"
+    },
+    {
+      "object": "label",
+      "source": "gitea:example/project",
+      "source_id": "gitea:label:bug",
+      "waystone_id": "gitea:label:bug",
+      "target_source": "waystone:example/project",
+      "target_key": "gitea:example/project:label:gitea:label:bug",
+      "numbering_strategy": "preserve-source-numbering"
+    },
+    {
+      "object": "milestone",
+      "source": "gitea:example/project",
+      "source_id": "gitea:milestone:v1",
+      "source_number": 1,
+      "source_url": "https://gitea.example.com/example/project/milestones/1",
+      "waystone_id": "gitea:milestone:v1",
+      "target_source": "waystone:example/project",
+      "target_key": "gitea:example/project:milestone:1",
+      "numbering_strategy": "preserve-source-numbering"
+    },
+    {
+      "object": "issue",
+      "source": "github:example/project",
+      "source_id": "github:issue:1",
+      "source_number": 1,
+      "source_url": "https://github.com/example/project/issues/1",
+      "waystone_id": "github:issue:1",
+      "target_source": "waystone:example/project",
+      "target_key": "github:example/project:issue:1",
+      "numbering_strategy": "preserve-source-numbering"
+    },
+    {
+      "object": "label",
+      "source": "github:example/project",
+      "source_id": "github:label:bug",
+      "waystone_id": "github:label:bug",
+      "target_source": "waystone:example/project",
+      "target_key": "github:example/project:label:github:label:bug",
+      "numbering_strategy": "preserve-source-numbering"
+    },
+    {
+      "object": "milestone",
+      "source": "github:example/project",
+      "source_id": "github:milestone:v1",
+      "source_number": 1,
+      "source_url": "https://github.com/example/project/milestones/1",
+      "waystone_id": "github:milestone:v1",
+      "target_source": "waystone:example/project",
+      "target_key": "github:example/project:milestone:1",
+      "numbering_strategy": "preserve-source-numbering"
+    },
+    {
+      "object": "issue",
+      "source": "gitlab:example/project",
+      "source_id": "gitlab:issue:1",
+      "source_number": 1,
+      "source_url": "https://gitlab.example.com/example/project/issues/1",
+      "waystone_id": "gitlab:issue:1",
+      "target_source": "waystone:example/project",
+      "target_key": "gitlab:example/project:issue:1",
+      "numbering_strategy": "preserve-source-numbering"
+    },
+    {
+      "object": "label",
+      "source": "gitlab:example/project",
+      "source_id": "gitlab:label:bug",
+      "waystone_id": "gitlab:label:bug",
+      "target_source": "waystone:example/project",
+      "target_key": "gitlab:example/project:label:gitlab:label:bug",
+      "numbering_strategy": "preserve-source-numbering"
+    },
+    {
+      "object": "milestone",
+      "source": "gitlab:example/project",
+      "source_id": "gitlab:milestone:v1",
+      "source_number": 1,
+      "source_url": "https://gitlab.example.com/example/project/milestones/1",
+      "waystone_id": "gitlab:milestone:v1",
+      "target_source": "waystone:example/project",
+      "target_key": "gitlab:example/project:milestone:1",
+      "numbering_strategy": "preserve-source-numbering"
+    },
+    {
+      "object": "issue",
+      "source": "waystone:example/project",
+      "source_id": "waystone:issue:1",
+      "source_number": 1,
+      "source_url": "waystone:example/project/issues/1",
+      "waystone_id": "waystone:issue:1",
+      "target_source": "waystone:example/project",
+      "target_key": "waystone:example/project:issue:1",
+      "numbering_strategy": "preserve-source-numbering"
+    },
+    {
+      "object": "label",
+      "source": "waystone:example/project",
+      "source_id": "waystone:label:bug",
+      "waystone_id": "waystone:label:bug",
+      "target_source": "waystone:example/project",
+      "target_key": "waystone:example/project:label:waystone:label:bug",
+      "numbering_strategy": "preserve-source-numbering"
+    },
+    {
+      "object": "milestone",
+      "source": "waystone:example/project",
+      "source_id": "waystone:milestone:v1",
+      "source_number": 1,
+      "source_url": "waystone:example/project/milestones/1",
+      "waystone_id": "waystone:milestone:v1",
+      "target_source": "waystone:example/project",
+      "target_key": "waystone:example/project:milestone:1",
+      "numbering_strategy": "preserve-source-numbering"
+    }
+  ],
+  "warnings": [
+    "Attachments are not yet represented",
+    "Review thread semantics are only partially represented",
+    "Users are not yet mapped to local identities",
+    "CI history is not represented",
+    "Number collision: issue #1 appears in github:example/project and gitlab:example/project",
+    "Number collision: issue #1 appears in github:example/project and forgejo:example/project",
+    "Number collision: issue #1 appears in github:example/project and gitea:example/project",
+    "Number collision: issue #1 appears in github:example/project and waystone:example/project",
+    "Label name overlap: \"bug\" appears in github:example/project and gitlab:example/project",
+    "Label name overlap: \"bug\" appears in github:example/project and forgejo:example/project",
+    "Label name overlap: \"bug\" appears in github:example/project and gitea:example/project",
+    "Label name overlap: \"bug\" appears in github:example/project and waystone:example/project",
+    "Milestone title overlap: \"v1\" appears in github:example/project and gitlab:example/project",
+    "Milestone title overlap: \"v1\" appears in github:example/project and forgejo:example/project",
+    "Milestone title overlap: \"v1\" appears in github:example/project and gitea:example/project",
+    "Milestone title overlap: \"v1\" appears in github:example/project and waystone:example/project",
+    "Author identity ambiguity: \"alice\" appears in github:example/project and gitlab:example/project",
+    "Author identity ambiguity: \"alice\" appears in github:example/project and forgejo:example/project",
+    "Author identity ambiguity: \"alice\" appears in github:example/project and gitea:example/project",
+    "Author identity ambiguity: \"alice\" appears in github:example/project and waystone:example/project",
+    "Unsupported records are reported and not silently dropped",
+    "Target writes are disabled"
+  ]
+}

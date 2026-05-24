@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -79,6 +80,51 @@ func TestWriteGitHubImport(t *testing.T) {
 		if object.Path == "" || object.SHA256 == "" {
 			t.Fatalf("source object missing path/hash: %#v", object)
 		}
+	}
+}
+
+func TestDiffAndWriteGitHubImportRejectSymlinkedParent(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	symlink := filepath.Join(root, "objects", "github", "example", "project")
+	if err := os.MkdirAll(filepath.Dir(symlink), 0o700); err != nil {
+		t.Fatalf("MkdirAll returned error: %v", err)
+	}
+	if err := os.Symlink(outside, symlink); err != nil {
+		t.Skipf("cannot create symlink: %v", err)
+	}
+	imported := model.GitHubImport{
+		Project: model.Project{ID: "github:repo:1", Name: "example/project"},
+		Source:  model.Source{System: "github", Owner: "example", Repo: "project"},
+		Issues:  []model.Issue{{ID: "github:issue:1", Number: 1, Title: "issue"}},
+	}
+	writer := Writer{Root: root}
+
+	if _, err := writer.DiffGitHubImport(imported); err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("DiffGitHubImport error = %v, want symlink rejection", err)
+	}
+	if err := writer.WriteGitHubImport(imported); err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("WriteGitHubImport error = %v, want symlink rejection", err)
+	}
+}
+
+func TestWriteJSONPreservesExistingFileWhenEncodingFails(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.json")
+	original := []byte("{\"version\":\"original\"}\n")
+	if err := os.WriteFile(path, original, 0o600); err != nil {
+		t.Fatalf("write original file: %v", err)
+	}
+
+	err := writeJSON(path, map[string]any{"not_json": make(chan int)})
+	if err == nil {
+		t.Fatal("writeJSON returned nil error for unencodable value")
+	}
+	got, readErr := os.ReadFile(path)
+	if readErr != nil {
+		t.Fatalf("read file after failed write: %v", readErr)
+	}
+	if string(got) != string(original) {
+		t.Fatalf("file content after failed write = %q, want original %q", string(got), string(original))
 	}
 }
 
@@ -208,6 +254,49 @@ func TestWriteOperationSignsWhenDefaultIdentityExists(t *testing.T) {
 	}
 	if _, err := (Reader{Root: root}).VerifyOperationSignatures(); err == nil {
 		t.Fatal("VerifyOperationSignatures returned nil error for tampered operation")
+	}
+}
+
+func TestDefaultIdentityRejectsSymlinkedIdentityParent(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Symlink(t.TempDir(), filepath.Join(root, "identities")); err != nil {
+		t.Skipf("cannot create symlink: %v", err)
+	}
+
+	if _, err := CreateDefaultIdentity(root, "test"); err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("CreateDefaultIdentity error = %v, want symlink rejection", err)
+	}
+	if _, err := DefaultIdentity(root); err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("DefaultIdentity error = %v, want symlink rejection", err)
+	}
+	if _, err := defaultPrivateKey(root); err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("defaultPrivateKey error = %v, want symlink rejection", err)
+	}
+}
+
+func TestCreateDefaultIdentityRejectsSymlinkedPrivateKey(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "identities"), 0o700); err != nil {
+		t.Fatalf("MkdirAll returned error: %v", err)
+	}
+	target := filepath.Join(t.TempDir(), "outside.key")
+	if err := os.WriteFile(target, []byte("outside"), 0o600); err != nil {
+		t.Fatalf("WriteFile returned error: %v", err)
+	}
+	if err := os.Symlink(target, filepath.Join(root, "identities", "default.key")); err != nil {
+		t.Skipf("cannot create symlink: %v", err)
+	}
+
+	_, err := CreateDefaultIdentity(root, "test")
+	if err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("CreateDefaultIdentity error = %v, want symlink rejection", err)
+	}
+	data, readErr := os.ReadFile(target)
+	if readErr != nil {
+		t.Fatalf("ReadFile returned error: %v", readErr)
+	}
+	if string(data) != "outside" {
+		t.Fatalf("symlink target content = %q, want unchanged", string(data))
 	}
 }
 

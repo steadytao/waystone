@@ -153,13 +153,14 @@ func (c *Client) issueNoteComments(ctx context.Context, project string, projectI
 	comments := make([]model.Comment, 0, len(notes))
 	for _, note := range notes {
 		comments = append(comments, model.Comment{
-			ID:          stableID("gitlab", "issue_note", strconv.FormatInt(projectID, 10), strconv.Itoa(issue.Number), strconv.FormatInt(note.ID, 10)),
-			SourceID:    note.ID,
-			IssueNumber: issue.Number,
-			Author:      author(note.Author),
-			Body:        note.Body,
-			CreatedAt:   note.CreatedAt,
-			UpdatedAt:   note.UpdatedAt,
+			ID:           stableID("gitlab", "issue_note", strconv.FormatInt(projectID, 10), strconv.Itoa(issue.Number), strconv.FormatInt(note.ID, 10)),
+			SourceID:     note.ID,
+			IssueNumber:  issue.Number,
+			ParentObject: "issue",
+			Author:       author(note.Author),
+			Body:         note.Body,
+			CreatedAt:    note.CreatedAt,
+			UpdatedAt:    note.UpdatedAt,
 		})
 	}
 	return comments, nil
@@ -221,13 +222,14 @@ func (c *Client) mergeRequestNoteComments(ctx context.Context, project string, p
 	comments := make([]model.Comment, 0, len(notes))
 	for _, note := range notes {
 		comments = append(comments, model.Comment{
-			ID:          stableID("gitlab", "merge_request_note", strconv.FormatInt(projectID, 10), strconv.Itoa(mr.Number), strconv.FormatInt(note.ID, 10)),
-			SourceID:    note.ID,
-			IssueNumber: mr.Number,
-			Author:      author(note.Author),
-			Body:        note.Body,
-			CreatedAt:   note.CreatedAt,
-			UpdatedAt:   note.UpdatedAt,
+			ID:           stableID("gitlab", "merge_request_note", strconv.FormatInt(projectID, 10), strconv.Itoa(mr.Number), strconv.FormatInt(note.ID, 10)),
+			SourceID:     note.ID,
+			IssueNumber:  mr.Number,
+			ParentObject: "pull_request",
+			Author:       author(note.Author),
+			Body:         note.Body,
+			CreatedAt:    note.CreatedAt,
+			UpdatedAt:    note.UpdatedAt,
 		})
 	}
 	return comments, nil

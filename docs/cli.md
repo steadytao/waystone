@@ -176,9 +176,10 @@ Source commands expose import manifests: identity, object refs, operation refs, 
 Source names are repo-specific namespaces. Remote imports currently use `github:owner/repo`, `gitlab:group/project`, `forgejo:owner/repo` and `gitea:owner/repo`. Local Waystone records use `waystone:owner/repo`. Numbers are source-local, so the same issue number can exist in multiple sources without representing the same record.
 
 Refresh behaviour:
-- `source refresh` refreshes every source by default
-- `--source` or `--sources` narrows refresh to selected sources
+- `source refresh` currently refreshes GitHub sources only
+- `--source` or `--sources` narrows refresh to selected supported sources
 - the browsing default source does not limit refresh
+- GitLab, Forgejo, Gitea and local Waystone sources are retained as read-only or local evidence in v0.2
 
 `--stale-after` accepts durations such as `7d`, `24h` or `0`. Use `0` to disable stale checks.
 
@@ -270,7 +271,7 @@ The migration plan uses safe read-only defaults: source authors, labels, milesto
 
 `migrate loss-report --json` writes a structured JSON report for unsupported or partially represented migration surfaces. It currently reports attachments, review-thread semantics, CI history, workflows, permissions, branch protections, user mapping, release assets and visibility uncertainty. It does not contact a target forge and does not write operation records.
 
-`migrate inspect` prints a review summary for a saved plan, including version, sources, target source, strategy values, record counts and warnings. It rejects unknown plan versions unless `--allow-unknown` is supplied.
+`migrate inspect` prints a review summary for a saved plan, including version, sources, target source, strategy values, record counts and warnings. It rejects unknown plan versions unless `--allow-unknown` is supplied. `--allow-unknown` only bypasses the version check for otherwise v1-shaped plans; it is for human review, not for trusting a future contract.
 
 `migrate verify` validates a saved plan artefact. It checks supported version, safe strategy values, required fields, declared source namespaces, duplicate records, disabled target writes and deterministic target keys under `preserve-source-numbering`.
 

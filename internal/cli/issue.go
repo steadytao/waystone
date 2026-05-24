@@ -631,12 +631,13 @@ func localIssueComment(source model.Source, issueNumber, commentNumber int, body
 			ImportID: ledger.SourceSpec(source),
 			Source:   source,
 		},
-		ID:          id,
-		IssueNumber: issueNumber,
-		Author:      model.Author{Login: "local"},
-		Body:        body,
-		CreatedAt:   createdAt,
-		UpdatedAt:   createdAt,
+		ID:           id,
+		IssueNumber:  issueNumber,
+		ParentObject: "issue",
+		Author:       model.Author{Login: "local"},
+		Body:         body,
+		CreatedAt:    createdAt,
+		UpdatedAt:    createdAt,
 	}
 }
 

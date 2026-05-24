@@ -66,11 +66,19 @@ func (c *Client) ImportRepository(ctx context.Context, owner, repo string) (mode
 	if err != nil {
 		return model.GitHubImport{}, err
 	}
+	pullNumberSet := make(map[int]bool, len(pullNumbers))
+	for _, number := range pullNumbers {
+		pullNumberSet[number] = true
+	}
 
 	c.report("Fetching issue and pull request conversation comments")
 	commentResults, err := concurrentMap(ctx, c.concurrency, commentNumbers, func(ctx context.Context, number int) ([]model.Comment, error) {
 		c.reportDetail(fmt.Sprintf("Fetching conversation comments for #%d", number))
-		issueComments, err := c.issueComments(ctx, owner, repo, number)
+		parentObject := "issue"
+		if pullNumberSet[number] {
+			parentObject = "pull_request"
+		}
+		issueComments, err := c.issueComments(ctx, owner, repo, number, parentObject)
 		if err != nil {
 			return nil, err
 		}

@@ -21,10 +21,20 @@ import (
 const identityAlgorithmEd25519 = "ed25519"
 
 func CreateDefaultIdentity(root, name string) (model.Identity, error) {
-	publicPath := defaultIdentityPath(root)
+	publicPath, err := safeRootedFilePath(root, filepath.Join("identities", "default.json"))
+	if err != nil {
+		return model.Identity{}, err
+	}
 	if _, err := os.Stat(publicPath); err == nil {
 		return model.Identity{}, fmt.Errorf("default identity already exists")
 	} else if !errors.Is(err, os.ErrNotExist) {
+		return model.Identity{}, err
+	}
+	privatePath, err := safeRootedWritePath(root, filepath.Join("identities", "default.key"))
+	if err != nil {
+		return model.Identity{}, err
+	}
+	if err := rejectExistingPrivateKeyPath(privatePath); err != nil {
 		return model.Identity{}, err
 	}
 
@@ -40,10 +50,10 @@ func CreateDefaultIdentity(root, name string) (model.Identity, error) {
 		PublicKey: base64.StdEncoding.EncodeToString(publicKey),
 		CreatedAt: time.Now().UTC(),
 	}
-	if err := writeJSON(publicPath, identity); err != nil {
+	if err := writeJSONUnderRoot(root, filepath.Join("identities", "default.json"), identity); err != nil {
 		return model.Identity{}, err
 	}
-	if err := writePrivateKey(defaultIdentityKeyPath(root), privateKey); err != nil {
+	if err := writePrivateKey(root, filepath.Join("identities", "default.key"), privateKey); err != nil {
 		return model.Identity{}, err
 	}
 	if err := (Writer{Root: root}).TrustIdentity(identity.ID); err != nil {
@@ -54,14 +64,22 @@ func CreateDefaultIdentity(root, name string) (model.Identity, error) {
 
 func DefaultIdentity(root string) (model.Identity, error) {
 	var identity model.Identity
-	if err := readJSONFile(defaultIdentityPath(root), &identity); err != nil {
+	path, err := safeRootedFilePath(root, filepath.Join("identities", "default.json"))
+	if err != nil {
+		return model.Identity{}, err
+	}
+	if err := readJSONFile(path, &identity); err != nil {
 		return model.Identity{}, err
 	}
 	return identity, nil
 }
 
 func defaultPrivateKey(root string) (ed25519.PrivateKey, error) {
-	data, err := os.ReadFile(defaultIdentityKeyPath(root)) // #nosec G304 -- key path is derived from the configured ledger root.
+	path, err := safeRootedFilePath(root, filepath.Join("identities", "default.key"))
+	if err != nil {
+		return nil, err
+	}
+	data, err := readFileNoSymlink(path)
 	if err != nil {
 		return nil, err
 	}
@@ -75,17 +93,35 @@ func defaultPrivateKey(root string) (ed25519.PrivateKey, error) {
 	return ed25519.PrivateKey(key), nil
 }
 
-func writePrivateKey(path string, privateKey ed25519.PrivateKey) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+func writePrivateKey(root, relative string, privateKey ed25519.PrivateKey) error {
+	path, err := safeRootedWritePath(root, relative)
+	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, []byte(base64.StdEncoding.EncodeToString(privateKey)), 0o600) // #nosec G306 -- private identity key intentionally uses owner-only permissions.
+	if err := rejectExistingPrivateKeyPath(path); err != nil {
+		return err
+	}
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600) // #nosec G304 -- key path is rooted under the ledger and checked for symlinks before creation.
+	if err != nil {
+		return err
+	}
+	if _, err := file.Write([]byte(base64.StdEncoding.EncodeToString(privateKey))); err != nil {
+		_ = file.Close()
+		return err
+	}
+	return file.Close()
 }
 
-func defaultIdentityPath(root string) string {
-	return filepath.Join(root, "identities", "default.json")
-}
-
-func defaultIdentityKeyPath(root string) string {
-	return filepath.Join(root, "identities", "default.key")
+func rejectExistingPrivateKeyPath(path string) error {
+	info, err := os.Lstat(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("default identity private key path %s is a symlink", path)
+	}
+	return fmt.Errorf("default identity private key already exists")
 }

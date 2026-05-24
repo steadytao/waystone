@@ -17,7 +17,12 @@ import (
 	"github.com/steadytao/waystone/internal/model"
 )
 
-const maxArchiveEntryBytes = 100 << 20
+const (
+	// Archive limits are defensive local resource bounds, not format-level compatibility limits.
+	maxArchiveEntryBytes = 100 << 20
+	maxArchiveEntries    = 10000
+	maxArchiveTotalBytes = 512 << 20
+)
 
 func ExportArchive(root, archivePath string) error {
 	if root == "" {
@@ -50,13 +55,16 @@ func ExportArchive(root, archivePath string) error {
 	defer tw.Close()
 
 	for _, ref := range manifest.Files {
-		filePath, err := SafeRootedPath(root, ref.Path)
+		filePath, err := safeRootedFilePath(root, ref.Path)
 		if err != nil {
 			return err
 		}
-		info, err := os.Stat(filePath)
+		info, err := os.Lstat(filePath)
 		if err != nil {
 			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("ledger path %s is a symlink", filePath)
 		}
 		header, err := tar.FileInfoHeader(info, "")
 		if err != nil {
@@ -67,7 +75,7 @@ func ExportArchive(root, archivePath string) error {
 		if err := tw.WriteHeader(header); err != nil {
 			return err
 		}
-		in, err := os.Open(filePath) // #nosec G304 -- filepath.WalkDir restricts exported files to the ledger root.
+		in, err := openFileNoSymlink(filePath)
 		if err != nil {
 			return err
 		}
@@ -148,6 +156,9 @@ func ExportSourceArchive(root, sourceSpec, archivePath string) error {
 	if err != nil {
 		return err
 	}
+	if _, err := (Reader{Root: root}).VerifyOperations(); err != nil {
+		return err
+	}
 	reader := Reader{Root: root}
 	currentSource, err := reader.Source(source)
 	if err != nil {
@@ -166,7 +177,8 @@ func ExportSourceArchive(root, sourceSpec, archivePath string) error {
 	if err := (Writer{Root: staging}).writeLedgerMetadata(); err != nil {
 		return err
 	}
-	if err := writeJSON(filepath.Join(staging, "projects", currentSource.System, currentSource.Owner, currentSource.Repo+".json"), project); err != nil {
+	projectPath := filepath.Join("projects", currentSource.System, currentSource.Owner, currentSource.Repo+".json")
+	if err := writeJSONUnderRoot(staging, projectPath, project); err != nil {
 		return err
 	}
 	now := time.Now().UTC()
@@ -176,19 +188,15 @@ func ExportSourceArchive(root, sourceSpec, archivePath string) error {
 		StartedAt: now,
 	}}
 	currentSource.Operations[0].Path = OperationPath(currentSource.Operations[0].ID)
-	sourcePath := filepath.Join(staging, sourceManifestPath(currentSource))
-	if err := os.MkdirAll(filepath.Dir(sourcePath), 0o700); err != nil {
-		return err
-	}
-	if err := writeJSON(sourcePath, currentSource); err != nil {
+	if err := writeJSONUnderRoot(staging, sourceManifestPath(currentSource), currentSource); err != nil {
 		return err
 	}
 	for _, object := range currentSource.Objects {
-		from, err := SafeRootedPath(root, object.Path)
+		from, err := safeRootedFilePath(root, object.Path)
 		if err != nil {
 			return err
 		}
-		to, err := SafeRootedPath(staging, object.Path)
+		to, err := safeRootedWritePath(staging, object.Path)
 		if err != nil {
 			return err
 		}
@@ -263,6 +271,9 @@ func extractArchive(archivePath, root string) error {
 	defer decoder.Close()
 
 	tr := tar.NewReader(decoder)
+	limits := defaultArchiveLimits()
+	var entries int
+	var totalBytes int64
 	for {
 		header, err := tr.Next()
 		if err == io.EOF {
@@ -271,21 +282,21 @@ func extractArchive(archivePath, root string) error {
 		if err != nil {
 			return err
 		}
+		if err := checkArchiveLimits(header, limits, &entries, &totalBytes); err != nil {
+			return err
+		}
 		if header.Name == archiveManifestName {
 			if _, err := io.CopyN(io.Discard, tr, header.Size); err != nil {
 				return err
 			}
 			continue
 		}
-		target, err := SafeRootedPath(root, header.Name)
+		target, err := safeRootedWritePath(root, header.Name)
 		if err != nil {
 			return err
 		}
 		switch header.Typeflag {
 		case tar.TypeReg:
-			if header.Size < 0 || header.Size > maxArchiveEntryBytes {
-				return fmt.Errorf("archive entry %s is too large", header.Name)
-			}
 			if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
 				return err
 			}
@@ -314,7 +325,7 @@ func copyFile(from, to string) error {
 	if err := os.MkdirAll(filepath.Dir(to), 0o700); err != nil {
 		return err
 	}
-	in, err := os.Open(from) // #nosec G304 -- source path comes from a verified source manifest object reference.
+	in, err := openFileNoSymlink(from)
 	if err != nil {
 		return err
 	}
@@ -328,8 +339,40 @@ func copyFile(from, to string) error {
 	return err
 }
 
+func rejectSymlinkEntry(path string, entry os.DirEntry) error {
+	if entry.Type()&os.ModeSymlink != 0 {
+		return fmt.Errorf("ledger path %s is a symlink", path)
+	}
+	return nil
+}
+
+func readFileNoSymlink(path string) ([]byte, error) {
+	file, err := openFileNoSymlink(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	return io.ReadAll(file)
+}
+
+func openFileNoSymlink(path string) (*os.File, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return nil, err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return nil, fmt.Errorf("ledger path %s is a symlink", path)
+	}
+	return os.Open(path) // #nosec G304 -- callers validate or discover paths under the configured ledger root.
+}
+
 func cleanArchivePath(name string) (string, error) {
 	name = strings.ReplaceAll(name, "\\", "/")
+	for _, component := range strings.Split(name, "/") {
+		if component == "" || component == "." || component == ".." {
+			return "", fmt.Errorf("unsafe path %q", name)
+		}
+	}
 	cleaned := path.Clean(name)
 	if cleaned == "." ||
 		cleaned == ".." ||
@@ -337,6 +380,7 @@ func cleanArchivePath(name string) (string, error) {
 		strings.HasPrefix(cleaned, "/") ||
 		strings.Contains(cleaned, "/../") ||
 		strings.Contains(cleaned, ":") ||
+		cleaned != name ||
 		!filepath.IsLocal(filepath.FromSlash(cleaned)) {
 		return "", fmt.Errorf("unsafe path %q", name)
 	}
@@ -361,6 +405,166 @@ func SafeRootedPath(root, name string) (string, error) {
 		return "", fmt.Errorf("unsafe path %q", name)
 	}
 	return target, nil
+}
+
+func safeRootedFilePath(root, name string) (string, error) {
+	target, err := SafeRootedPath(root, filepath.ToSlash(name))
+	if err != nil {
+		return "", err
+	}
+	if err := rejectRootedSymlinkDirs(root, filepath.Dir(target)); err != nil {
+		return "", err
+	}
+	return target, nil
+}
+
+func safeRootedDirPath(root, name string) (string, error) {
+	target, err := SafeRootedPath(root, filepath.ToSlash(name))
+	if err != nil {
+		return "", err
+	}
+	if err := rejectRootedSymlinkDirs(root, target); err != nil {
+		return "", err
+	}
+	return target, nil
+}
+
+func safeRootedWritePath(root, name string) (string, error) {
+	target, err := SafeRootedPath(root, filepath.ToSlash(name))
+	if err != nil {
+		return "", err
+	}
+	if err := ensureRootedDirNoSymlink(root, filepath.Dir(target)); err != nil {
+		return "", err
+	}
+	return target, nil
+}
+
+func rejectRootedSymlinkDirs(root, dir string) error {
+	absoluteRoot, err := filepath.Abs(root)
+	if err != nil {
+		return err
+	}
+	absoluteDir, err := filepath.Abs(dir)
+	if err != nil {
+		return err
+	}
+	if err := checkRootDirectoryNoSymlink(absoluteRoot); err != nil {
+		return err
+	}
+	relative, err := filepath.Rel(absoluteRoot, absoluteDir)
+	if err != nil {
+		return err
+	}
+	if relative == "." {
+		return nil
+	}
+	current := absoluteRoot
+	for _, component := range strings.Split(relative, string(filepath.Separator)) {
+		if component == "" || component == "." {
+			continue
+		}
+		current = filepath.Join(current, component)
+		info, err := os.Lstat(current)
+		if os.IsNotExist(err) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("ledger path %s is a symlink", current)
+		}
+		if !info.IsDir() {
+			return fmt.Errorf("ledger path %s is not a directory", current)
+		}
+	}
+	return nil
+}
+
+func ensureRootedDirNoSymlink(root, dir string) error {
+	absoluteRoot, err := filepath.Abs(root)
+	if err != nil {
+		return err
+	}
+	absoluteDir, err := filepath.Abs(dir)
+	if err != nil {
+		return err
+	}
+	if err := ensureRootDirectoryNoSymlink(absoluteRoot); err != nil {
+		return err
+	}
+	relative, err := filepath.Rel(absoluteRoot, absoluteDir)
+	if err != nil {
+		return err
+	}
+	if relative == "." {
+		return nil
+	}
+	current := absoluteRoot
+	for _, component := range strings.Split(relative, string(filepath.Separator)) {
+		if component == "" || component == "." {
+			continue
+		}
+		current = filepath.Join(current, component)
+		info, err := os.Lstat(current)
+		if os.IsNotExist(err) {
+			if err := os.Mkdir(current, 0o700); err != nil {
+				return err
+			}
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("ledger path %s is a symlink", current)
+		}
+		if !info.IsDir() {
+			return fmt.Errorf("ledger path %s is not a directory", current)
+		}
+	}
+	return nil
+}
+
+func checkRootDirectoryNoSymlink(root string) error {
+	info, err := os.Lstat(root)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("ledger path %s is a symlink", root)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("ledger path %s is not a directory", root)
+	}
+	return nil
+}
+
+func ensureRootDirectoryNoSymlink(root string) error {
+	info, err := os.Lstat(root)
+	if os.IsNotExist(err) {
+		if err := os.MkdirAll(root, 0o700); err != nil {
+			return err
+		}
+		info, err = os.Lstat(root)
+		if err != nil {
+			return err
+		}
+	}
+	if err != nil {
+		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("ledger path %s is a symlink", root)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("ledger path %s is not a directory", root)
+	}
+	return nil
 }
 
 func ensureEmptyOrMissing(root string) error {

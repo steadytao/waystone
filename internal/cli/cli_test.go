@@ -411,9 +411,9 @@ func TestGitLabImportCommandWritesLedgerRecord(t *testing.T) {
 	if len(prs) != 1 || prs[0].ID != "gitlab:merge_request:101:2" || prs[0].Number != 2 {
 		t.Fatalf("pull requests = %#v, want GitLab merge request as source-preserved change proposal evidence", prs)
 	}
-	comments, err := reader.SourceComments(source, 2)
+	comments, err := reader.SourcePullRequestComments(source, 2)
 	if err != nil {
-		t.Fatalf("SourceComments returned error: %v", err)
+		t.Fatalf("SourcePullRequestComments returned error: %v", err)
 	}
 	if len(comments) != 1 || comments[0].ID != "gitlab:merge_request_note:101:2:302" {
 		t.Fatalf("merge request comments = %#v, want GitLab merge request note", comments)
@@ -424,6 +424,65 @@ func TestGitLabImportCommandWritesLedgerRecord(t *testing.T) {
 	}
 	if len(operations) != 1 || operations[0].Command != "gitlab import" || operations[0].Auth.Provider != "gitlab" || operations[0].Auth.Mode != "environment" {
 		t.Fatalf("operations = %#v, want gitlab import operation with environment auth", operations)
+	}
+}
+
+func TestGitLabImportSeparatesIssueAndMergeRequestNotesWithSameNumber(t *testing.T) {
+	createdAt := "2026-01-01T00:00:00Z"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/projects/example/project":
+			fmt.Fprintf(w, `{"id":101,"path_with_namespace":"example/project","description":"test project","web_url":"https://gitlab.example.com/example/project","created_at":%q,"last_activity_at":%q}`, createdAt, createdAt)
+		case "/projects/example/project/issues":
+			fmt.Fprintf(w, `[{"id":201,"iid":1,"title":"issue","description":"issue body","state":"opened","author":{"id":1,"username":"alice"},"user_notes_count":1,"web_url":"https://gitlab.example.com/example/project/-/issues/1","created_at":%q,"updated_at":%q}]`, createdAt, createdAt)
+		case "/projects/example/project/issues/1/notes":
+			fmt.Fprintf(w, `[{"id":301,"author":{"id":2,"username":"bob"},"body":"issue note","system":false,"created_at":%q,"updated_at":%q}]`, createdAt, createdAt)
+		case "/projects/example/project/merge_requests":
+			fmt.Fprintf(w, `[{"id":202,"iid":1,"title":"merge request","description":"merge body","state":"opened","author":{"id":1,"username":"alice"},"web_url":"https://gitlab.example.com/example/project/-/merge_requests/1","source_branch":"feature","target_branch":"main","created_at":%q,"updated_at":%q}]`, createdAt, createdAt)
+		case "/projects/example/project/merge_requests/1/notes":
+			fmt.Fprintf(w, `[{"id":302,"author":{"id":3,"username":"carol"},"body":"merge request note","system":false,"created_at":%q,"updated_at":%q}]`, createdAt, createdAt)
+		case "/projects/example/project/labels", "/projects/example/project/milestones", "/projects/example/project/releases":
+			fmt.Fprint(w, `[]`)
+		default:
+			t.Fatalf("unexpected GitLab test path: %s", r.URL.Path)
+		}
+	}))
+	t.Cleanup(server.Close)
+	root := t.TempDir()
+	t.Setenv("GITLAB_TOKEN", "test-token")
+	if err := Run(context.Background(), []string{"gitlab", "import", "--api-base", server.URL, "--out", root, "example/project"}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("gitlab import returned error: %v", err)
+	}
+	reader := ledger.Reader{Root: root}
+	source := model.Source{System: "gitlab", Owner: "example", Repo: "project"}
+	issueComments, err := reader.SourceComments(source, 1)
+	if err != nil {
+		t.Fatalf("SourceComments returned error: %v", err)
+	}
+	if len(issueComments) != 1 || issueComments[0].Body != "issue note" {
+		t.Fatalf("issue comments = %#v, want only issue note", issueComments)
+	}
+	pullRequestComments, err := reader.SourcePullRequestComments(source, 1)
+	if err != nil {
+		t.Fatalf("SourcePullRequestComments returned error: %v", err)
+	}
+	if len(pullRequestComments) != 1 || pullRequestComments[0].Body != "merge request note" {
+		t.Fatalf("merge request comments = %#v, want only merge request note", pullRequestComments)
+	}
+	out := filepath.Join(t.TempDir(), "migration-plan.json")
+	if err := Run(context.Background(), []string{"migrate", "plan", "--ledger", root, "--from", "gitlab:example/project", "--to", "waystone:example/project", "--out", out}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("migrate plan returned error: %v", err)
+	}
+	plan := readMigrationPlanFixture(t, out)
+	var commentRecords int
+	for _, record := range plan.Records {
+		if record.Object == "comment" {
+			commentRecords++
+		}
+	}
+	if commentRecords != 2 {
+		t.Fatalf("comment migration records = %d, want issue note and merge request note", commentRecords)
 	}
 }
 
@@ -520,9 +579,9 @@ func TestForgejoImportCommandWritesLedgerRecord(t *testing.T) {
 	if len(prs) != 1 || prs[0].ID != "forgejo:pull_request:101:2" || prs[0].Number != 2 {
 		t.Fatalf("pull requests = %#v, want Forgejo pull request identity", prs)
 	}
-	comments, err := reader.SourceComments(source, 2)
+	comments, err := reader.SourcePullRequestComments(source, 2)
 	if err != nil {
-		t.Fatalf("SourceComments returned error: %v", err)
+		t.Fatalf("SourcePullRequestComments returned error: %v", err)
 	}
 	if len(comments) != 1 || comments[0].ID != "forgejo:pull_request_comment:101:2:302" {
 		t.Fatalf("pull request comments = %#v, want Forgejo pull request comment", comments)
@@ -1760,6 +1819,170 @@ func TestMigrateVerifyRejectsUnknownVersion(t *testing.T) {
 	}
 }
 
+func TestMigrateVerifyRejectsTrailingJSON(t *testing.T) {
+	plan := validMigrationPlanFixture()
+	path := writeMigrationPlanFixture(t, plan)
+	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatalf("open migration plan: %v", err)
+	}
+	if _, err := file.WriteString("{}\n"); err != nil {
+		t.Fatalf("append trailing migration plan JSON: %v", err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatalf("close migration plan: %v", err)
+	}
+
+	err = Run(context.Background(), []string{"migrate", "verify", path}, io.Discard, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "migration plan must contain exactly one JSON object") {
+		t.Fatalf("migrate verify error = %v, want trailing JSON rejection", err)
+	}
+}
+
+func TestMigrateVerifyRejectsDuplicateJSONMembers(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "migration-plan.json")
+	data := []byte(`{
+  "version": "waystone.migration_plan.v1",
+  "version": "waystone.migration_plan.v1"
+}`)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("write migration plan: %v", err)
+	}
+
+	err := Run(context.Background(), []string{"migrate", "verify", path}, io.Discard, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "duplicate JSON object member") {
+		t.Fatalf("migrate verify error = %v, want duplicate JSON member error", err)
+	}
+}
+
+func TestMigratePlanRejectsDuplicateStrategyJSONMembers(t *testing.T) {
+	root := writeTestLedger(t)
+	path := filepath.Join(t.TempDir(), "migration-strategy.json")
+	data := []byte(`{
+  "version": "waystone.migration_strategy.v1",
+  "strategy": {
+    "numbering_strategy": "preserve-source-numbering",
+    "author_mapping_strategy": "preserve-source-author",
+    "label_mapping_strategy": "preserve-source-labels",
+    "milestone_mapping_strategy": "preserve-source-milestones",
+    "state_mapping_strategy": "preserve-source-state",
+    "change_proposal_strategy": "preserve-as-local-notes",
+    "timestamp_strategy": "preserve-source-timestamps",
+    "collision_strategy": "source-scoped-target-keys",
+    "attachment_strategy": "link-only",
+    "visibility_strategy": "report-only",
+    "comment_strategy": "preserve-source-comments",
+    "unsupported_record_strategy": "report-only",
+    "target_write_strategy": "unsafe-target-write",
+    "target_write_strategy": "none"
+  }
+}`)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("write migration strategy: %v", err)
+	}
+
+	out := filepath.Join(t.TempDir(), "migration-plan.json")
+	err := Run(context.Background(), []string{"migrate", "plan", "--ledger", root, "--from", "github:example/project", "--to", "waystone:steadytao/waystone", "--strategy-file", path, "--out", out}, io.Discard, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "duplicate JSON object member") {
+		t.Fatalf("migrate plan error = %v, want duplicate JSON member error", err)
+	}
+}
+
+func TestMigrateVerifyRejectsInvalidSourceNamespace(t *testing.T) {
+	plan := validMigrationPlanFixture()
+	plan.Sources[0].Source = "github:bad/../repo"
+	plan.Records[0].Source = plan.Sources[0].Source
+	plan.Records[0].TargetKey = migrationPlanTargetKey(plan.Records[0].Source, plan.Records[0].Object, plan.Records[0].SourceID, plan.Records[0].SourceNumber)
+	path := writeMigrationPlanFixture(t, plan)
+
+	err := Run(context.Background(), []string{"migrate", "verify", path}, io.Discard, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "source contains unsafe component") {
+		t.Fatalf("migrate verify error = %v, want unsafe source namespace error", err)
+	}
+}
+
+func TestMigrateVerifyRejectsUnsupportedSourceSystem(t *testing.T) {
+	plan := validMigrationPlanFixture()
+	plan.From = "bitbucket:example/project"
+	plan.Sources[0].Source = "bitbucket:example/project"
+	plan.Records[0].Source = "bitbucket:example/project"
+	plan.Records[0].TargetKey = migrationPlanTargetKey(plan.Records[0].Source, plan.Records[0].Object, plan.Records[0].SourceID, plan.Records[0].SourceNumber)
+	path := writeMigrationPlanFixture(t, plan)
+
+	err := Run(context.Background(), []string{"migrate", "verify", path}, io.Discard, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "unsupported source system") {
+		t.Fatalf("migrate verify error = %v, want unsupported source system error", err)
+	}
+}
+
+func TestMigrateVerifyRejectsNonCanonicalSourceNamespace(t *testing.T) {
+	plan := validMigrationPlanFixture()
+	plan.From = "github/example/project"
+	path := writeMigrationPlanFixture(t, plan)
+
+	err := Run(context.Background(), []string{"migrate", "verify", path}, io.Discard, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "must use canonical source namespace") {
+		t.Fatalf("migrate verify error = %v, want canonical source namespace error", err)
+	}
+}
+
+func TestMigrateVerifyRejectsFromSourcesMismatch(t *testing.T) {
+	plan := validMigrationPlanFixture()
+	plan.From = "github:example/project,gitlab:example/project"
+	path := writeMigrationPlanFixture(t, plan)
+
+	err := Run(context.Background(), []string{"migrate", "verify", path}, io.Discard, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "migration plan sources must match migration plan from") {
+		t.Fatalf("migrate verify error = %v, want source set mismatch error", err)
+	}
+}
+
+func TestMigrateVerifyRejectsRecordTargetSourceMismatch(t *testing.T) {
+	plan := validMigrationPlanFixture()
+	plan.Records[0].TargetSource = "waystone:other/repo"
+	path := writeMigrationPlanFixture(t, plan)
+
+	err := Run(context.Background(), []string{"migrate", "verify", path}, io.Discard, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "does not match migration plan to") {
+		t.Fatalf("migrate verify error = %v, want target source mismatch error", err)
+	}
+}
+
+func TestMigrateVerifyRejectsMissingPlanMetadata(t *testing.T) {
+	tests := []struct {
+		name string
+		edit func(*model.MigrationPlan)
+		want string
+	}{
+		{
+			name: "created_at",
+			edit: func(plan *model.MigrationPlan) {
+				plan.CreatedAt = time.Time{}
+			},
+			want: "created_at is required",
+		},
+		{
+			name: "tool_version",
+			edit: func(plan *model.MigrationPlan) {
+				plan.ToolVersion = ""
+			},
+			want: "tool_version is required",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			plan := validMigrationPlanFixture()
+			tt.edit(&plan)
+			path := writeMigrationPlanFixture(t, plan)
+
+			err := Run(context.Background(), []string{"migrate", "verify", path}, io.Discard, io.Discard)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("migrate verify error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
 func TestMigrateVerifyRejectsDuplicateRecords(t *testing.T) {
 	plan := validMigrationPlanFixture()
 	plan.Records = append(plan.Records, plan.Records[0])
@@ -1777,6 +2000,30 @@ func TestMigrateVerifyRejectsMissingSource(t *testing.T) {
 	err := Run(context.Background(), []string{"migrate", "verify", path}, io.Discard, io.Discard)
 	if err == nil || !strings.Contains(err.Error(), "record 0 source is required") {
 		t.Fatalf("migrate verify error = %v, want missing source error", err)
+	}
+}
+
+func TestMigrateVerifyRejectsUnsupportedRecordObject(t *testing.T) {
+	plan := validMigrationPlanFixture()
+	plan.Records[0].Object = "permissions"
+	plan.Records[0].SourceID = "github:permissions:1"
+	plan.Records[0].TargetKey = migrationPlanTargetKey(plan.Records[0].Source, plan.Records[0].Object, plan.Records[0].SourceID, plan.Records[0].SourceNumber)
+	path := writeMigrationPlanFixture(t, plan)
+
+	err := Run(context.Background(), []string{"migrate", "verify", path}, io.Discard, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "object \"permissions\" is not supported") {
+		t.Fatalf("migrate verify error = %v, want unsupported object error", err)
+	}
+}
+
+func TestMigrateVerifyRejectsNegativeSourceNumber(t *testing.T) {
+	plan := validMigrationPlanFixture()
+	plan.Records[0].SourceNumber = -1
+	path := writeMigrationPlanFixture(t, plan)
+
+	err := Run(context.Background(), []string{"migrate", "verify", path}, io.Discard, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "source_number must not be negative") {
+		t.Fatalf("migrate verify error = %v, want source number error", err)
 	}
 }
 
@@ -3429,8 +3676,8 @@ func writeTestLedgerSourceWithSystem(t *testing.T, root string, source model.Sou
 			{Provenance: provenance, ID: source.System + ":issue:10", SourceID: 10, Number: options.IssueNumber, Title: "issue", Body: "issue body", State: "open", Author: model.Author{Login: options.AuthorLogin}, OriginalURL: issueURL, CreatedAt: createdAt},
 		},
 		Comments: []model.Comment{
-			{Provenance: provenance, ID: source.System + ":issue_comment:20", SourceID: 20, IssueNumber: options.IssueNumber, Author: model.Author{Login: options.CommentAuthorLogin}, Body: "comment", OriginalURL: issueURL + "#issuecomment-20", CreatedAt: createdAt.Add(time.Hour)},
-			{Provenance: provenance, ID: source.System + ":issue_comment:21", SourceID: 21, IssueNumber: options.PullRequestNumber, Author: model.Author{Login: options.PullRequestCommentAuthorLogin}, Body: "pr conversation", OriginalURL: pullRequestURL + "#issuecomment-21", CreatedAt: createdAt.Add(30 * time.Minute)},
+			{Provenance: provenance, ID: source.System + ":issue_comment:20", SourceID: 20, IssueNumber: options.IssueNumber, ParentObject: "issue", Author: model.Author{Login: options.CommentAuthorLogin}, Body: "comment", OriginalURL: issueURL + "#issuecomment-20", CreatedAt: createdAt.Add(time.Hour)},
+			{Provenance: provenance, ID: source.System + ":issue_comment:21", SourceID: 21, IssueNumber: options.PullRequestNumber, ParentObject: "pull_request", Author: model.Author{Login: options.PullRequestCommentAuthorLogin}, Body: "pr conversation", OriginalURL: pullRequestURL + "#issuecomment-21", CreatedAt: createdAt.Add(30 * time.Minute)},
 		},
 		PullRequests: []model.PullRequest{
 			{Provenance: provenance, ID: source.System + ":pull_request:30", SourceID: 30, Number: options.PullRequestNumber, Title: "pr", Body: "pr body", State: "closed", Author: model.Author{Login: options.AuthorLogin}, OriginalURL: pullRequestURL, CreatedAt: createdAt},
